@@ -33,6 +33,8 @@ cd polyo
 ./gradlew test
 ```
 
+테스트는 Testcontainers로 임시 PostgreSQL 컨테이너를 따로 띄워 실행하므로 Docker Desktop이 켜져 있어야 하며, 로컬 개발 DB의 데이터는 건드리지 않습니다.
+
 DB를 중지하려면 저장소 루트에서 `docker compose down`을 실행합니다.
 데이터는 Docker 볼륨에 보관되어 다음 실행에도 유지됩니다.
 `docker compose down -v`는 DB 데이터를 삭제하므로 초기화할 때만 사용합니다.
@@ -63,7 +65,7 @@ cd polyo
 
 생성 요청은 `{"roomName":"같이 플레이해요","isPrivate":false}`, 코드 입장 요청은 `{"entryCode":"발급받은코드"}`입니다. 정원은 방장 포함 2명이며 비공개 방의 신규 참가자는 코드로 입장합니다. 방 삭제는 방장만 가능합니다.
 
-매치 룸은 메모리에 저장하므로 서버 재시작 시 초기화됩니다. WebSocket 연결과 게임 시작 기능은 별도 연동 대상입니다.
+매치 룸은 PostgreSQL의 `match_room`, `match_room_member` 테이블에 저장되며, 테이블은 앱 시작 시 Flyway(`polyo/src/main/resources/db/migration`)가 생성합니다. 스키마를 바꿀 때는 기존 파일을 수정하지 말고 `V2__설명.sql`처럼 새 마이그레이션을 추가합니다. 같은 방에 대한 입장과 삭제는 방 행 잠금(`SELECT ... FOR UPDATE`)으로 순서대로 처리합니다. WebSocket 연결과 게임 시작 기능은 별도 연동 대상입니다.
 
 ## 인증 연동 경계
 

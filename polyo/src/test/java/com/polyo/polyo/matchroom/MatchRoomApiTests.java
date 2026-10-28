@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 
+import com.polyo.polyo.TestcontainersConfiguration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -20,6 +21,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
@@ -30,6 +32,7 @@ import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(TestcontainersConfiguration.class)
 class MatchRoomApiTests {
     private static final AtomicInteger SEQUENCE = new AtomicInteger();
     private static final String ROOT = "/api/match-room";
@@ -39,9 +42,8 @@ class MatchRoomApiTests {
     @Autowired MatchRoomRepository rooms;
 
     @BeforeEach
-    void removeWaitingRooms() {
-        rooms.findAll().forEach(room -> rooms.delete(room.id(),
-                new MatchRoomUser(room.hostUserId(), room.members().getFirst().nickname())));
+    void removeRooms() {
+        rooms.deleteAll();
     }
 
     @Test
@@ -60,6 +62,8 @@ class MatchRoomApiTests {
         assertThat(room.path("status").asText()).isEqualTo("WAITING");
         assertThat(room.path("members").size()).isEqualTo(1);
         assertThat(code).matches("[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}");
+        assertThat(rooms.existsById(id)).isTrue();
+        assertThat(rooms.existsByEntryCode(code)).isTrue();
 
         mvc.perform(post(ROOT + "/{id}/members", id).with(guest.authentication()).with(csrf()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.success").value(true))
@@ -74,6 +78,7 @@ class MatchRoomApiTests {
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("ROOM_HOST_ONLY"));
         mvc.perform(delete(ROOT + "/{id}", id).with(host.authentication()).with(csrf()))
                 .andExpect(status().isNoContent()).andExpect(content().string(""));
+        assertThat(rooms.existsById(id)).isFalse();
         mvc.perform(post(ROOT + "/{id}/members", id).with(guest.authentication()).with(csrf()))
                 .andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("ROOM_NOT_FOUND"));
         mvc.perform(post(ROOT + "/code/members").with(guest.authentication()).with(csrf())
@@ -170,7 +175,7 @@ class MatchRoomApiTests {
                 .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.error.code").value("UNAUTHENTICATED"));
         mvc.perform(get(ROOT).with(user("external-principal")))
                 .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.error.code").value("UNAUTHENTICATED"));
-        assertThat(rooms.findAll()).isEmpty();
+        assertThat(rooms.count()).isZero();
     }
 
     @ParameterizedTest
@@ -185,7 +190,7 @@ class MatchRoomApiTests {
         mvc.perform(post(ROOT).with(user.authentication()).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
-        assertThat(rooms.findAll()).isEmpty();
+        assertThat(rooms.count()).isZero();
     }
 
     @ParameterizedTest
