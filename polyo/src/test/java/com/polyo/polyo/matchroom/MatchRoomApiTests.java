@@ -154,7 +154,8 @@ class MatchRoomApiTests {
 
     @Test
     void allFiveEndpointsRequireAuthentication() throws Exception {
-        mvc.perform(get(ROOT).accept(MediaType.APPLICATION_JSON)).andExpect(status().isUnauthorized());
+        mvc.perform(get(ROOT).accept(MediaType.APPLICATION_JSON)).andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("UNAUTHENTICATED"));
         mvc.perform(post(ROOT).with(csrf()).accept(MediaType.APPLICATION_JSON)
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isUnauthorized());

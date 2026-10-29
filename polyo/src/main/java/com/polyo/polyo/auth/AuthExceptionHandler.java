@@ -1,11 +1,15 @@
 package com.polyo.polyo.auth;
 
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-@RestControllerAdvice
+// Must outrank GlobalExceptionHandler, whose Exception handler would otherwise turn AuthException into 500.
+@Order(Ordered.HIGHEST_PRECEDENCE)
+@RestControllerAdvice(assignableTypes = AuthController.class)
 public class AuthExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Void>> handleValidation(MethodArgumentNotValidException exception) {
