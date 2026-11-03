@@ -1,6 +1,7 @@
 package com.polyo.polyo.auth;
 
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -33,4 +34,13 @@ public class JwtTokenProvider {
     }
 
     public long expiresInSeconds() { return expiresInSeconds; }
+
+    public Long getUserId(String token) {
+        try {
+            return Long.valueOf(Jwts.parser().verifyWith(key).build()
+                    .parseSignedClaims(token).getPayload().getSubject());
+        } catch (JwtException | IllegalArgumentException exception) {
+            return null;
+        }
+    }
 }
