@@ -1,5 +1,7 @@
 package com.polyo.polyo.auth;
 
+import com.polyo.polyo.score.UserGameScore;
+import com.polyo.polyo.score.UserGameScoreRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -8,11 +10,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AuthService {
     private final UserRepository userRepository;
+    private final UserGameScoreRepository scoreRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtTokenProvider tokenProvider) {
+    public AuthService(UserRepository userRepository, UserGameScoreRepository scoreRepository,
+                       PasswordEncoder passwordEncoder, JwtTokenProvider tokenProvider) {
         this.userRepository = userRepository;
+        this.scoreRepository = scoreRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
     }
@@ -30,6 +35,7 @@ public class AuthService {
         try {
             User user = userRepository.save(User.create(
                     request.loginId(), passwordEncoder.encode(request.password()), request.nickname()));
+            scoreRepository.save(new UserGameScore(user.getId()));
             return new SignupResponse(String.valueOf(user.getId()), user.getLoginId(), user.getNickname());
         } catch (DataIntegrityViolationException exception) {
             throw new AuthException("DUPLICATE_USER_INFO", "이미 사용 중인 아이디 또는 닉네임입니다.", 409);
