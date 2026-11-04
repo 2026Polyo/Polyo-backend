@@ -92,6 +92,10 @@ public class MatchRoom {
         return this;
     }
 
+    public void start() {
+        status = MatchRoomStatus.PLAYING;
+    }
+
     public void checkDeletableBy(MatchRoomUser user) {
         if (!hostUserId.equals(user.id())) {
             throw new MatchRoomException("ROOM_HOST_ONLY", "방장만 방을 삭제할 수 있습니다.", 403);

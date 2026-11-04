@@ -1,0 +1,104 @@
+package com.polyo.polyo.game;
+
+import com.polyo.polyo.auth.JwtTokenProvider;
+import com.polyo.polyo.matchroom.MatchRoomException;
+import com.polyo.polyo.matchroom.MatchRoomUser;
+import java.io.IOException;
+import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+import org.springframework.web.socket.CloseStatus;
+import org.springframework.web.socket.TextMessage;
+import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.handler.TextWebSocketHandler;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+/**
+ * Socket endpoint for /ws/match/{roomId}. Browsers cannot set an Authorization header on a WebSocket,
+ * so the first message must be {"type":"AUTH","token":"..."}; the token stays out of URLs and logs.
+ */
+@Component
+public class GameWebSocketHandler extends TextWebSocketHandler {
+    private static final Logger log = LoggerFactory.getLogger(GameWebSocketHandler.class);
+    private static final String USER = "user";
+
+    private final GameHub hub;
+    private final JwtTokenProvider tokens;
+    private final JsonMapper json;
+
+    public GameWebSocketHandler(GameHub hub, JwtTokenProvider tokens, JsonMapper json) {
+        this.hub = hub;
+        this.tokens = tokens;
+        this.json = json;
+    }
+
+    @Override
+    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws IOException {
+        JsonNode body;
+        try {
+            body = json.readTree(message.getPayload());
+        } catch (JacksonException exception) {
+            hub.sendError(session, "INVALID_MESSAGE", "메시지 형식이 올바르지 않습니다.");
+            return;
+        }
+        MatchRoomUser user = (MatchRoomUser) session.getAttributes().get(USER);
+        try {
+            if (user == null) {
+                authenticate(session, body);
+            } else {
+                dispatch(session, user, body);
+            }
+        } catch (GameException exception) {
+            hub.sendError(session, exception.code(), exception.getMessage());
+        } catch (MatchRoomException exception) {
+            hub.sendError(session, exception.code(), exception.getMessage());
+            session.close(CloseStatus.POLICY_VIOLATION);
+        }
+    }
+
+    private void authenticate(WebSocketSession session, JsonNode body) throws IOException {
+        Optional<MatchRoomUser> user = "AUTH".equals(body.path("type").asString(""))
+                ? tokens.parse(body.path("token").asString("")) : Optional.empty();
+        if (user.isEmpty()) {
+            hub.sendError(session, "UNAUTHENTICATED", "로그인이 필요합니다.");
+            session.close(CloseStatus.POLICY_VIOLATION);
+            return;
+        }
+        hub.connect(session, roomId(session), user.get());
+        session.getAttributes().put(USER, user.get());
+    }
+
+    private void dispatch(WebSocketSession session, MatchRoomUser user, JsonNode body) {
+        long roomId = roomId(session);
+        switch (body.path("type").asString("")) {
+            case "PLACE" -> {
+                if (!body.path("pieceUid").isString() || !body.path("row").isInt() || !body.path("col").isInt()) {
+                    throw new GameException("INVALID_MESSAGE", "메시지 형식이 올바르지 않습니다.");
+                }
+                hub.place(roomId, user.id(), body.path("pieceUid").asString(), body.path("row").asInt(), body.path("col").asInt());
+            }
+            case "FORFEIT" -> hub.forfeit(roomId, user.id());
+            default -> throw new GameException("INVALID_MESSAGE", "메시지 형식이 올바르지 않습니다.");
+        }
+    }
+
+    @Override
+    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+        MatchRoomUser user = (MatchRoomUser) session.getAttributes().get(USER);
+        if (user != null) {
+            hub.disconnect(session, roomId(session), user.id());
+        }
+    }
+
+    @Override
+    public void handleTransportError(WebSocketSession session, Throwable exception) {
+        log.debug("Game socket transport error", exception);
+    }
+
+    private long roomId(WebSocketSession session) {
+        return (long) session.getAttributes().get(GameRoomInterceptor.ROOM_ID);
+    }
+}

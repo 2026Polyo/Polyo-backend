@@ -1,5 +1,6 @@
 package com.polyo.polyo.matchroom;
 
+import java.util.List;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -49,6 +50,28 @@ public class MatchRoomService {
         MatchRoom room = repository.findByIdForUpdate(roomId).orElseThrow(MatchRoomException::notFound);
         room.checkDeletableBy(user);
         repository.delete(room);
+    }
+
+    /** The room's members, after checking that {@code user} is one of them. */
+    @Transactional(readOnly = true)
+    public List<MatchRoom.Member> membersOf(long roomId, MatchRoomUser user) {
+        MatchRoom room = repository.findById(roomId).orElseThrow(MatchRoomException::notFound);
+        List<MatchRoom.Member> members = List.copyOf(room.members());
+        if (members.stream().noneMatch(member -> member.userId().equals(user.id()))) {
+            throw new MatchRoomException("ROOM_MEMBER_ONLY", "방 참가자만 접속할 수 있습니다.", 403);
+        }
+        return members;
+    }
+
+    @Transactional
+    public void markPlaying(long roomId) {
+        repository.findByIdForUpdate(roomId).orElseThrow(MatchRoomException::notFound).start();
+    }
+
+    /** A finished room is removed: matches are one game long and results are not stored yet. */
+    @Transactional
+    public void finish(long roomId) {
+        repository.findByIdForUpdate(roomId).ifPresent(repository::delete);
     }
 
     private String allocateEntryCode() {
