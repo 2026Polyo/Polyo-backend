@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import com.polyo.polyo.score.ScoreException;
 
 // Must outrank GlobalExceptionHandler, whose Exception handler would otherwise turn AuthException into 500.
 @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -20,6 +21,11 @@ public class AuthExceptionHandler {
 
     @ExceptionHandler(AuthException.class)
     public ResponseEntity<ApiResponse<Void>> handle(AuthException exception) {
+        return ResponseEntity.status(exception.status()).body(ApiResponse.failure(exception.code(), exception.getMessage()));
+    }
+
+    @ExceptionHandler(ScoreException.class)
+    public ResponseEntity<ApiResponse<Void>> handle(ScoreException exception) {
         return ResponseEntity.status(exception.status()).body(ApiResponse.failure(exception.code(), exception.getMessage()));
     }
 }
