@@ -11,7 +11,10 @@ spring:
     open-in-view: false
   sql:
     init:
-      mode: always
+      mode: never
+  flyway:
+    baseline-on-migrate: true
+    baseline-version: 0
 
 app:
   auth:
