@@ -3,10 +3,16 @@ package com.polyo.polyo.game;
 import com.polyo.polyo.auth.JwtTokenProvider;
 import com.polyo.polyo.matchroom.MatchRoomException;
 import com.polyo.polyo.matchroom.MatchRoomUser;
+import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.util.Optional;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -19,20 +25,39 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * Socket endpoint for /ws/match/{roomId}. Browsers cannot set an Authorization header on a WebSocket,
  * so the first message must be {"type":"AUTH","token":"..."}; the token stays out of URLs and logs.
+ * A socket that sends no AUTH within the timeout is closed.
  */
 @Component
 public class GameWebSocketHandler extends TextWebSocketHandler {
     private static final Logger log = LoggerFactory.getLogger(GameWebSocketHandler.class);
     private static final String USER = "user";
+    /** Set once by whichever comes first: the AUTH message or the timeout. */
+    private static final String AUTH_DECIDED = "authDecided";
 
     private final GameHub hub;
     private final JwtTokenProvider tokens;
     private final JsonMapper json;
+    private final long authTimeoutMs;
+    private final ScheduledExecutorService authTimers = Executors.newSingleThreadScheduledExecutor();
 
-    public GameWebSocketHandler(GameHub hub, JwtTokenProvider tokens, JsonMapper json) {
+    public GameWebSocketHandler(GameHub hub, JwtTokenProvider tokens, JsonMapper json,
+            @Value("${app.game.auth-timeout-ms:10000}") long authTimeoutMs) {
         this.hub = hub;
         this.tokens = tokens;
         this.json = json;
+        this.authTimeoutMs = authTimeoutMs;
+    }
+
+    @Override
+    public void afterConnectionEstablished(WebSocketSession session) {
+        AtomicBoolean decided = new AtomicBoolean();
+        session.getAttributes().put(AUTH_DECIDED, decided);
+        authTimers.schedule(() -> {
+            if (decided.compareAndSet(false, true)) {
+                hub.sendError(session, "AUTH_TIMEOUT", "인증 시간이 초과되었습니다.");
+                closeQuietly(session);
+            }
+        }, authTimeoutMs, TimeUnit.MILLISECONDS);
     }
 
     @Override
@@ -60,6 +85,9 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void authenticate(WebSocketSession session, JsonNode body) throws IOException {
+        if (!((AtomicBoolean) session.getAttributes().get(AUTH_DECIDED)).compareAndSet(false, true)) {
+            return; // timed out, or a failed AUTH already closed the socket
+        }
         Optional<MatchRoomUser> user = "AUTH".equals(body.path("type").asString(""))
                 ? tokens.parse(body.path("token").asString("")) : Optional.empty();
         if (user.isEmpty()) {
@@ -67,7 +95,14 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
             session.close(CloseStatus.POLICY_VIOLATION);
             return;
         }
-        hub.connect(session, roomId(session), user.get());
+        try {
+            hub.connect(session, roomId(session), user.get());
+        } catch (GameException exception) {
+            // Only one AUTH is accepted, so a socket that could not join is of no further use.
+            hub.sendError(session, exception.code(), exception.getMessage());
+            session.close(CloseStatus.POLICY_VIOLATION);
+            return;
+        }
         session.getAttributes().put(USER, user.get());
     }
 
@@ -81,6 +116,19 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
                 hub.place(roomId, user.id(), body.path("pieceUid").asString(), body.path("row").asInt(), body.path("col").asInt());
             }
             case "FORFEIT" -> hub.forfeit(roomId, user.id());
+            case "READY" -> {
+                if (!body.path("ready").isBoolean()) {
+                    throw new GameException("INVALID_MESSAGE", "메시지 형식이 올바르지 않습니다.");
+                }
+                hub.setReady(roomId, user, body.path("ready").asBoolean());
+            }
+            case "START" -> hub.start(roomId, user);
+            case "EMOTE" -> {
+                if (!body.path("emote").isString()) {
+                    throw new GameException("INVALID_MESSAGE", "메시지 형식이 올바르지 않습니다.");
+                }
+                hub.emote(roomId, user.id(), body.path("emote").asString());
+            }
             default -> throw new GameException("INVALID_MESSAGE", "메시지 형식이 올바르지 않습니다.");
         }
     }
@@ -96,6 +144,19 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) {
         log.debug("Game socket transport error", exception);
+    }
+
+    private void closeQuietly(WebSocketSession session) {
+        try {
+            session.close(CloseStatus.POLICY_VIOLATION);
+        } catch (IOException exception) {
+            log.debug("Could not close unauthenticated game socket", exception);
+        }
+    }
+
+    @PreDestroy
+    void shutdown() {
+        authTimers.shutdownNow();
     }
 
     private long roomId(WebSocketSession session) {

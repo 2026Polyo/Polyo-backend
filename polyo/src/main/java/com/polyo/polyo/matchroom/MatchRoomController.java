@@ -53,6 +53,12 @@ public class MatchRoomController {
         return ApiResponse.success(service.joinByCode(request, requireUser(user)));
     }
 
+    @DeleteMapping("/{roomId}/members/me")
+    public ResponseEntity<Void> leave(@PathVariable @Positive long roomId, @AuthenticationPrincipal MatchRoomUser user) {
+        service.leave(roomId, requireUser(user));
+        return ResponseEntity.noContent().build();
+    }
+
     @DeleteMapping("/{roomId}")
     public ResponseEntity<Void> delete(@PathVariable @Positive long roomId, @AuthenticationPrincipal MatchRoomUser user) {
         service.delete(roomId, requireUser(user));
