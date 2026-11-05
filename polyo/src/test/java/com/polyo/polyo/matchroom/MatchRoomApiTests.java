@@ -40,6 +40,7 @@ class MatchRoomApiTests {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
     @Autowired MatchRoomRepository rooms;
+    @Autowired MatchRoomService service;
 
     @BeforeEach
     void removeRooms() {
@@ -166,6 +167,47 @@ class MatchRoomApiTests {
                 .andExpect(status().isUnauthorized());
         mvc.perform(delete(ROOT + "/1").with(csrf()).accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized());
+        mvc.perform(delete(ROOT + "/1/members/me").with(csrf()).accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void guestLeavingFreesTheSeatAndHostLeavingDeletesTheRoom() throws Exception {
+        Client host = authenticatedUser();
+        Client guest = authenticatedUser();
+        Client outsider = authenticatedUser();
+        long id = createRoom(host, "나가기", false).path("roomId").asLong();
+        mvc.perform(post(ROOT + "/{id}/members", id).with(guest.authentication()).with(csrf()))
+                .andExpect(status().isOk());
+
+        mvc.perform(delete(ROOT + "/{id}/members/me", id).with(outsider.authentication()).with(csrf()))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("ROOM_MEMBER_ONLY"));
+        mvc.perform(delete(ROOT + "/{id}/members/me", id).with(guest.authentication()).with(csrf()))
+                .andExpect(status().isNoContent()).andExpect(content().string(""));
+        mvc.perform(post(ROOT + "/{id}/members", id).with(host.authentication()).with(csrf()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.playerCount").value(1))
+                .andExpect(jsonPath("$.data.status").value("WAITING"));
+        mvc.perform(post(ROOT + "/{id}/members", id).with(outsider.authentication()).with(csrf()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.playerCount").value(2));
+
+        mvc.perform(delete(ROOT + "/{id}/members/me", id).with(host.authentication()).with(csrf()))
+                .andExpect(status().isNoContent());
+        assertThat(rooms.existsById(id)).isFalse();
+        mvc.perform(delete(ROOT + "/{id}/members/me", id).with(outsider.authentication()).with(csrf()))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("ROOM_NOT_FOUND"));
+    }
+
+    @Test
+    void leavingAStartedGameIsRejected() throws Exception {
+        Client host = authenticatedUser();
+        Client guest = authenticatedUser();
+        long id = createRoom(host, "진행 중", false).path("roomId").asLong();
+        mvc.perform(post(ROOT + "/{id}/members", id).with(guest.authentication()).with(csrf()))
+                .andExpect(status().isOk());
+        service.markPlaying(id, service.membersOf(id, new MatchRoomUser(host.id(), host.nickname())));
+
+        mvc.perform(delete(ROOT + "/{id}/members/me", id).with(guest.authentication()).with(csrf()))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("MATCH_ALREADY_STARTED"));
     }
 
     @Test

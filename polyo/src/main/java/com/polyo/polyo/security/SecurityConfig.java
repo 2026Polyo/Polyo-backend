@@ -28,7 +28,8 @@ public class SecurityConfig {
     ) throws Exception {
         return http.csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth.requestMatchers("/api/v1/auth/**").permitAll()
+                // The game socket authenticates with its first message, not with an HTTP header.
+                .authorizeHttpRequests(auth -> auth.requestMatchers("/api/v1/auth/**", "/ws/match/*").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(
                         new JwtAuthenticationFilter(tokenProvider),
