@@ -28,11 +28,19 @@ class JwtAuthenticationFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (header != null && header.startsWith(BEARER_PREFIX)) {
-            // A bad token only leaves the request anonymous, so public endpoints such as login still work.
-            // The principal is a MatchRoomUser; Authentication.getName() is its user ID (used by the score API).
             tokenProvider.parse(header.substring(BEARER_PREFIX.length())).ifPresent(user -> {
+                var authentication = new UsernamePasswordAuthenticationToken(
+                        user,
+                        null,
+                        Collections.emptyList()
+                );
+
+                authentication.setDetails(
+                        new WebAuthenticationDetailsSource().buildDetails(request)
+                );
+
                 SecurityContext context = SecurityContextHolder.createEmptyContext();
-                context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(user, null, List.of()));
+                context.setAuthentication(authentication);
                 SecurityContextHolder.setContext(context);
             });
         }

@@ -11,7 +11,11 @@ import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -61,10 +65,61 @@ class JwtAuthenticationTests {
 
         for (String header : new String[] {"Bearer " + expired, "Bearer " + withoutNickname, "Bearer " + forged,
                 "Bearer not-a-token", "Bearer ", "Basic " + valid}) {
-            mvc.perform(get(ROOT).header(HttpHeaders.AUTHORIZATION, header))
+            for (String path : new String[] {ROOT, "/api/v1/scores/me"}) {
+                mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, header))
+                        .andExpect(status().isUnauthorized())
+                        .andExpect(jsonPath("$.error.code").value("UNAUTHENTICATED"));
+            }
+        }
+    }
+
+    @Test
+    void loginTokenKeepsScoreApisBoundToTheLoggedInUser() throws Exception {
+        String token = signupAndLogin().path("accessToken").asText();
+        String otherToken = signupAndLogin().path("accessToken").asText();
+
+        mvc.perform(post("/api/v1/scores").header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("gameMode", "normal", "score", 1234))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.bestScore").value(1234));
+        mvc.perform(post("/api/v1/scores").header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("gameMode", "hard", "score", 4321))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.bestScore").value(4321));
+        mvc.perform(get("/api/v1/scores/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.normalBestScore").value(1234))
+                .andExpect(jsonPath("$.data.hardBestScore").value(4321));
+        mvc.perform(get("/api/v1/scores/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + otherToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.normalBestScore").value(0))
+                .andExpect(jsonPath("$.data.hardBestScore").value(0));
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidIdentities")
+    void rejectsInvalidIdentityClaimsAcrossProtectedApis(String subject, String nickname) throws Exception {
+        String header = "Bearer " + token(subject, nickname, 60);
+        for (String path : new String[] {ROOT, "/api/v1/scores/me"}) {
+            mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, header))
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.error.code").value("UNAUTHENTICATED"));
         }
+    }
+
+    private static Stream<Arguments> invalidIdentities() {
+        return Stream.of(
+                Arguments.of(null, "정상"),
+                Arguments.of("", "정상"),
+                Arguments.of(" ", "정상"),
+                Arguments.of("user_1", "정상"),
+                Arguments.of("0", "정상"),
+                Arguments.of("-1", "정상"),
+                Arguments.of("9223372036854775808", "정상"),
+                Arguments.of("1", ""),
+                Arguments.of("1", " "));
     }
 
     @Test
