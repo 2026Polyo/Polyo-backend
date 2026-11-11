@@ -10,6 +10,8 @@ public enum CreditErrorCode implements ErrorCode {
     CREDIT_GAME_ACCESS_DENIED(403, "이 게임에 접근할 권한이 없습니다."),
     CREDIT_GAME_NOT_ELIGIBLE(409, "일반 게임은 코인 보상 대상이 아닙니다."),
     CREDIT_GAME_NOT_FINISHED(409, "게임이 아직 종료되지 않았습니다."),
+    CREDIT_INVALID_GAME_MOVE(400, "그 위치에는 블록을 놓을 수 없습니다."),
+    CREDIT_GAME_MOVE_CONFLICT(409, "하드모드 게임 상태가 변경되었습니다."),
     CREDIT_GAME_RESULT_NOT_VERIFIED(409, "게임 결과 검증이 완료되지 않았습니다."),
     CREDIT_INVALID_GAME_RESULT(500, "게임 결과를 확인하지 못했습니다."),
     CREDIT_INVALID_REWARD_AMOUNT(500, "코인 보상량을 확인하지 못했습니다."),
