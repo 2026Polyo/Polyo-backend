@@ -3,10 +3,13 @@ package com.polyo.polyo.security;
 
 import com.polyo.polyo.auth.JwtTokenProvider;
 import com.polyo.polyo.common.ApiResponse;
+import com.polyo.polyo.common.api.ApiFailure;
+import com.polyo.polyo.common.error.CommonErrorCode;
 import tools.jackson.databind.json.JsonMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -30,6 +33,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // The game socket authenticates with its first message, not with an HTTP header.
                 .authorizeHttpRequests(auth -> auth.requestMatchers("/api/v1/auth/**", "/ws/match/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/shop/v11/themes").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(
                         new JwtAuthenticationFilter(tokenProvider),
@@ -50,8 +54,13 @@ public class SecurityConfig {
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             response.setCharacterEncoding("UTF-8");
-            jsonMapper.writeValue(response.getOutputStream(),
-                    ApiResponse.failure("UNAUTHENTICATED", "로그인이 필요합니다."));
+            String path = request.getRequestURI().substring(request.getContextPath().length());
+            if (path.startsWith("/api/credit/v11/") || path.startsWith("/api/shop/v11/")) {
+                jsonMapper.writeValue(response.getOutputStream(), ApiFailure.of(CommonErrorCode.AUTH_UNAUTHORIZED));
+            } else {
+                jsonMapper.writeValue(response.getOutputStream(),
+                        ApiResponse.failure("UNAUTHENTICATED", "로그인이 필요합니다."));
+            }
         };
     }
 }

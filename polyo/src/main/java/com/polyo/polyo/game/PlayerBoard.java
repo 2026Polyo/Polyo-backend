@@ -37,6 +37,15 @@ final class PlayerBoard {
     record Outcome(int scoreGain, int cleared, Set<String> clearingCells) {
     }
 
+    PlayerBoard() {}
+
+    PlayerBoard(String[][] cells, int score, int combo, boolean clearedThisTray) {
+        this.cells = copy(cells);
+        this.score = score;
+        this.combo = combo;
+        this.clearedThisTray = clearedThisTray;
+    }
+
     boolean canPlace(Piece piece, int row, int col) {
         for (int[] cell : piece.cells()) {
             int r = row + cell[0];
@@ -66,6 +75,10 @@ final class PlayerBoard {
 
     /** Places a piece that {@link #canPlace} accepted and applies every effect. */
     Outcome place(Piece piece, int row, int col) {
+        return place(piece, row, col, 1);
+    }
+
+    Outcome place(Piece piece, int row, int col, int scoreMultiplier) {
         int echoBonus = piece.is("echo") ? filledCount() * ECHO_SCORE_PER_CELL : 0;
 
         List<String> pieceKeys = new ArrayList<>();
@@ -97,7 +110,7 @@ final class PlayerBoard {
         int clearScore = result.count() * LINE_SCORE;
         int multiLineScore = Math.max(0, result.count() - 1) * MULTI_LINE_BONUS;
         int comboScore = result.count() * combo * COMBO_BONUS;
-        int baseScore = placementScore + clearScore + multiLineScore + comboScore;
+        int baseScore = (placementScore + clearScore + multiLineScore + comboScore) * scoreMultiplier;
 
         int ghostBonus = resolveGhosts(overlapped, clearing);
         int goldenBonus = resolveGolden(clearing, clearScore);
@@ -134,6 +147,7 @@ final class PlayerBoard {
 
     int score() { return score; }
     int combo() { return combo; }
+    boolean clearedThisTray() { return clearedThisTray; }
 
     // Package-private seams so tests can stage states that normal play would clear away.
     void fillForTest() {

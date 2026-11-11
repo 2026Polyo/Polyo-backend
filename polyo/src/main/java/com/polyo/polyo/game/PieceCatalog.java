@@ -1,6 +1,7 @@
 package com.polyo.polyo.game;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -86,6 +87,34 @@ final class PieceCatalog {
             tray.add(random.nextDouble() < SPECIAL_CHANCE ? randomSpecial(random) : randomPlain(random));
         }
         return tray;
+    }
+
+    /** Build three pieces that can be played in some order on the current board. */
+    static List<String> nextHardTray(PlayerBoard board, Random random) {
+        var simulation = new PlayerBoard(board.cells(), 0, 0, false);
+        var shapes = new ArrayList<>(ALL_SHAPES);
+        var tray = new ArrayList<String>(3);
+        for (int slot = 0; slot < 3; slot++) {
+            Collections.shuffle(shapes, random);
+            tray.add(placeSimulatedPiece(simulation, shapes));
+        }
+        Collections.shuffle(tray, random);
+        return tray;
+    }
+
+    private static String placeSimulatedPiece(PlayerBoard board, List<String> shapes) {
+        for (String shape : shapes) {
+            Piece piece = plain(shape, "cyan");
+            for (int row = 0; row < PlayerBoard.SIZE; row++) {
+                for (int col = 0; col < PlayerBoard.SIZE; col++) {
+                    if (board.canPlace(piece, row, col)) {
+                        board.place(piece, row, col);
+                        return shape;
+                    }
+                }
+            }
+        }
+        throw new IllegalStateException("Settled board must have room for a single cell");
     }
 
     private static Piece randomPlain(Random random) {
