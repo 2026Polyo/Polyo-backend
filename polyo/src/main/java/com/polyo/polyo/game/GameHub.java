@@ -41,6 +41,10 @@ public class GameHub {
     private static final Set<String> EMOTES = Set.of("smile", "laugh", "wow", "sad", "angry", "cool");
     /** Emotes closer together than this from one player are dropped, so a stuck key cannot flood the room. */
     private static final long EMOTE_INTERVAL_MS = 500;
+    /** Cursors closer together than this from one player are dropped; clients send at most one per 100ms. */
+    private static final long CURSOR_INTERVAL_MS = 50;
+    /** Tray uids are 36-character UUIDs, so a cursor naming a longer one is dropped instead of relayed. */
+    private static final int MAX_CURSOR_PIECE_UID_LENGTH = 64;
 
     private final MatchRoomService rooms;
     private final JsonMapper json;
@@ -57,6 +61,7 @@ public class GameHub {
         /** Guests who pressed ready. The host starts the game instead of readying. */
         final Set<String> ready = new HashSet<>();
         final Map<String, Long> lastEmoteAt = new HashMap<>();
+        final Map<String, Long> lastCursorAt = new HashMap<>();
         String hostUserId;
         List<MatchRoom.Member> members = List.of();
         MatchGame game;
@@ -68,6 +73,13 @@ public class GameHub {
     }
 
     record EmoteMessage(String type, String userId, String emote) {
+    }
+
+    /**
+     * The block a player holds ({@code pieceUid}, null when none) and where it would land, in PLACE's
+     * coordinates. {@code row} and {@code col} are null together when there is no spot to show.
+     */
+    record CursorMessage(String type, String userId, String pieceUid, Integer row, Integer col) {
     }
 
     record ErrorMessage(String type, String code, String message) {
@@ -236,6 +248,56 @@ public class GameHub {
             String payload = json.writeValueAsString(new EmoteMessage("EMOTE", userId, emote));
             List.copyOf(channel.sessions.values()).forEach(session -> send(session, payload));
         }
+    }
+
+    /**
+     * Relays what the current player is holding and where it would land, to the other player only.
+     * Cursors are frequent and only decorative, so one that does not fit is dropped without an ERROR.
+     */
+    void cursor(long roomId, String userId, String pieceUid, Integer row, Integer col) {
+        if (!isValidCursor(pieceUid, row, col)) {
+            return;
+        }
+        // Unlike an emote, a missing channel is not an error.
+        RoomChannel channel = channels.get(roomId);
+        if (channel == null) {
+            return;
+        }
+        synchronized (channel) {
+            MatchGame game = channel.game;
+            if (game == null || game.finished() || !game.current().userId.equals(userId)) {
+                return;
+            }
+            long now = System.currentTimeMillis();
+            Long last = channel.lastCursorAt.get(userId);
+            if (last != null && now - last < CURSOR_INTERVAL_MS) {
+                return;
+            }
+            channel.lastCursorAt.put(userId, now);
+            String payload = json.writeValueAsString(new CursorMessage("CURSOR", userId, pieceUid, row, col));
+            // Not echoed like an emote: the sender already sees their own cursor. Collected into a list
+            // before sending, because a failed send can remove a session (see broadcastCurrent).
+            channel.sessions.entrySet().stream()
+                    .filter(entry -> !entry.getKey().equals(userId))
+                    .map(Map.Entry::getValue)
+                    .toList()
+                    .forEach(session -> send(session, payload));
+        }
+    }
+
+    /** Row and col are null together, or both in the range the clients draw: -SIZE to SIZE - 1. */
+    private static boolean isValidCursor(String pieceUid, Integer row, Integer col) {
+        if (pieceUid != null && pieceUid.length() > MAX_CURSOR_PIECE_UID_LENGTH) {
+            return false;
+        }
+        if (row == null || col == null) {
+            return row == null && col == null;
+        }
+        return isCursorCoordinate(row) && isCursorCoordinate(col);
+    }
+
+    private static boolean isCursorCoordinate(int value) {
+        return value >= -PlayerBoard.SIZE && value < PlayerBoard.SIZE;
     }
 
     private RoomChannel openChannel(long roomId) {

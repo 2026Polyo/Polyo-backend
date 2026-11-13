@@ -11,7 +11,10 @@ import com.polyo.polyo.matchroom.MatchRoomUser;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -79,11 +82,18 @@ class GameSocketTests {
         }
 
         JsonNode next(String type) throws Exception {
+            return until(type).getLast();
+        }
+
+        /** Everything received up to and including the next message of this type, oldest first. */
+        List<JsonNode> until(String type) throws Exception {
+            List<JsonNode> messages = new ArrayList<>();
             for (;;) {
                 JsonNode message = received.poll(5, TimeUnit.SECONDS);
                 assertThat(message).as("waiting for " + type).isNotNull();
+                messages.add(message);
                 if (type.equals(message.path("type").asString())) {
-                    return message;
+                    return messages;
                 }
             }
         }
@@ -122,6 +132,20 @@ class GameSocketTests {
                 return waiting;
             }
         }
+    }
+
+    /** A CURSOR message. Built on a HashMap because Map.of rejects the nulls that mean "nothing here". */
+    private static Map<String, Object> cursor(Object pieceUid, Object row, Object col) {
+        Map<String, Object> message = new HashMap<>();
+        message.put("type", "CURSOR");
+        message.put("pieceUid", pieceUid);
+        message.put("row", row);
+        message.put("col", col);
+        return message;
+    }
+
+    private static List<String> types(List<JsonNode> messages) {
+        return messages.stream().map(message -> message.path("type").asString()).toList();
     }
 
     @Test
@@ -284,6 +308,107 @@ class GameSocketTests {
         assertThat(guest.next("ERROR").path("code").asString()).isEqualTo("INVALID_EMOTE");
         guest.send(Map.of("type", "EMOTE"));
         assertThat(guest.next("ERROR").path("code").asString()).isEqualTo("INVALID_MESSAGE");
+    }
+
+    @Test
+    void cursorsReachOnlyTheOpponentDuringTheSendersTurn() throws Exception {
+        MatchRoomUser hostUser = newUser();
+        MatchRoomUser guestUser = newUser();
+        long roomId = fullRoom(hostUser, guestUser);
+        Client host = new Client(hostUser, roomId);
+        Client guest = new Client(guestUser, roomId);
+        host.authenticate();
+        guest.authenticate();
+        guest.next("WAITING");
+        JsonNode state = startGame(host, guest);
+        boolean hostFirst = hostUser.id().equals(state.path("turnUserId").asString());
+        Client mover = hostFirst ? host : guest;
+        Client waiter = hostFirst ? guest : host;
+        String uid = state.path("tray").get(0).path("uid").asString();
+
+        // The server fills in userId, whatever the client claims.
+        Map<String, Object> aim = cursor(uid, 3, 5);
+        aim.put("userId", waiter.user.id());
+        mover.send(aim);
+        // Sent within the interval: dropped.
+        mover.send(cursor(uid, 4, 4));
+        JsonNode relayed = waiter.next("CURSOR");
+        assertThat(relayed.path("userId").asString()).isEqualTo(mover.user.id());
+        assertThat(relayed.path("pieceUid").asString()).isEqualTo(uid);
+        assertThat(relayed.path("row").asInt()).isEqualTo(3);
+        assertThat(relayed.path("col").asInt()).isEqualTo(5);
+
+        // Held off the board, then let go: relayed as explicit nulls.
+        Thread.sleep(100);
+        mover.send(cursor(uid, null, null));
+        JsonNode offBoard = waiter.next("CURSOR");
+        assertThat(offBoard.path("pieceUid").asString()).isEqualTo(uid);
+        assertThat(offBoard.path("row").isNull()).isTrue();
+        assertThat(offBoard.path("col").isNull()).isTrue();
+        Thread.sleep(100);
+        mover.send(cursor(null, null, null));
+        JsonNode released = waiter.next("CURSOR");
+        assertThat(released.path("pieceUid").isNull()).isTrue();
+        assertThat(released.path("row").isNull()).isTrue();
+        assertThat(released.path("col").isNull()).isTrue();
+
+        // Not the waiter's turn: dropped. The emote after it arrives once everything before it has.
+        waiter.send(cursor(uid, 1, 1));
+        waiter.send(Map.of("type", "EMOTE", "emote", "smile"));
+        // The mover hears neither its own cursors nor the waiter's.
+        assertThat(types(mover.until("EMOTE"))).doesNotContain("CURSOR", "ERROR");
+        assertThat(types(waiter.until("EMOTE"))).doesNotContain("CURSOR", "ERROR");
+
+        mover.send(Map.of("type", "FORFEIT"));
+        waiter.next("STATE");
+    }
+
+    @Test
+    void cursorsOutsideAGameOrMalformedAreDroppedWithoutAnError() throws Exception {
+        MatchRoomUser hostUser = newUser();
+        MatchRoomUser guestUser = newUser();
+        long roomId = fullRoom(hostUser, guestUser);
+        Client host = new Client(hostUser, roomId);
+        Client guest = new Client(guestUser, roomId);
+        host.authenticate();
+        guest.authenticate();
+        guest.next("WAITING");
+
+        // No game yet. The emote's echo arrives once everything the cursor caused has.
+        host.send(cursor("p-1", 3, 5));
+        host.send(Map.of("type", "EMOTE", "emote", "smile"));
+        assertThat(types(guest.until("EMOTE"))).doesNotContain("CURSOR");
+        assertThat(types(host.until("EMOTE"))).doesNotContain("CURSOR", "ERROR");
+
+        JsonNode state = startGame(host, guest);
+        Client mover = hostUser.id().equals(state.path("turnUserId").asString()) ? host : guest;
+        Client waiter = mover == host ? guest : host;
+        String uid = state.path("tray").get(0).path("uid").asString();
+        mover.send(cursor(uid, 99, 0));
+        mover.send(cursor(uid, 0, -9));
+        mover.send(cursor(uid, null, 0));
+        mover.send(cursor(123, 0, 0));
+        mover.send(cursor("p".repeat(65), 0, 0));
+        mover.send(cursor(uid, "3", 0));
+        mover.send(cursor(uid, 1.5, 0));
+        mover.send(Map.of("type", "CURSOR"));
+        // The edges of the range are fine.
+        mover.send(cursor(uid, -8, 7));
+        JsonNode relayed = waiter.next("CURSOR");
+        assertThat(relayed.path("row").asInt()).isEqualTo(-8);
+        assertThat(relayed.path("col").asInt()).isEqualTo(7);
+        // Sent once the relay arrived, so it lands after any ERROR the mover got. The guest emotes
+        // because the host just did and would be throttled.
+        guest.send(Map.of("type", "EMOTE", "emote", "wow"));
+        assertThat(types(mover.until("EMOTE"))).doesNotContain("CURSOR", "ERROR");
+
+        // Once the game is over its channel is gone, so an emote would fail with ROOM_CLOSED. A cursor is
+        // still dropped quietly: the unknown emote's ERROR is the first one back.
+        mover.send(Map.of("type", "FORFEIT"));
+        waiter.next("STATE");
+        mover.send(cursor(uid, 0, 0));
+        mover.send(Map.of("type", "EMOTE", "emote", "heart"));
+        assertThat(mover.next("ERROR").path("code").asString()).isEqualTo("INVALID_EMOTE");
     }
 
     @Test
