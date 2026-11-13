@@ -96,6 +96,14 @@ public class ThemeShop {
         return account(userId, coin);
     }
 
+    @Transactional
+    public Account grantLocalCoins(long userId) {
+        long balance = (long) wallet.lockBalance(userId) + 1_000;
+        wallet.setBalance(userId, balance);
+        return account(userId, (int) balance);
+    }
+
+
     private boolean owns(long userId, String themeId) {
         return jdbc.sql("""
                 SELECT EXISTS(SELECT 1 FROM theme_order_history WHERE user_id = :userId AND theme_id = :themeId)
