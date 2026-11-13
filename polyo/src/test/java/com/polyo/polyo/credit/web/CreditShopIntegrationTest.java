@@ -80,11 +80,20 @@ class CreditShopIntegrationTest {
 
     @Test
     void shopRejectsUnownedThemesAndDeductsOnlyOnceForConcurrentPurchases() throws Exception {
-        User player = createUser(1_300);
+        User player = createUser(750);
         String token = auth(player);
         String theme = "{\"themeId\":\"theme_neon\"}";
-        mvc.perform(get(SHOP + "/themes")).andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(4));
+        mvc.perform(get(SHOP + "/themes").param("sort", "price,asc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(4))
+                .andExpect(jsonPath("$.data.items[0].themeId").value("theme_jelly"))
+                .andExpect(jsonPath("$.data.items[0].price").value(300))
+                .andExpect(jsonPath("$.data.items[1].themeId").value("theme_neon"))
+                .andExpect(jsonPath("$.data.items[1].price").value(500))
+                .andExpect(jsonPath("$.data.items[2].themeId").value("theme_cat"))
+                .andExpect(jsonPath("$.data.items[2].price").value(750))
+                .andExpect(jsonPath("$.data.items[3].themeId").value("theme_minecraft"))
+                .andExpect(jsonPath("$.data.items[3].price").value(750));
         mvc.perform(get(SHOP + "/accounts/me")).andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error.code").value("AUTH_UNAUTHORIZED"));
         mvc.perform(put(SHOP + "/equipment/me").header(HttpHeaders.AUTHORIZATION, token)
@@ -94,8 +103,8 @@ class CreditShopIntegrationTest {
         try (var executor = Executors.newFixedThreadPool(2)) {
             var first = executor.submit(() -> shop.purchase(player.getId(), "theme_neon"));
             var second = executor.submit(() -> shop.purchase(player.getId(), "theme_neon"));
-            assertThat(first.get(5, TimeUnit.SECONDS).coin()).isEqualTo(100);
-            assertThat(second.get(5, TimeUnit.SECONDS).coin()).isEqualTo(100);
+            assertThat(first.get(5, TimeUnit.SECONDS).coin()).isEqualTo(250);
+            assertThat(second.get(5, TimeUnit.SECONDS).coin()).isEqualTo(250);
         }
         mvc.perform(post(SHOP + "/purchases").header(HttpHeaders.AUTHORIZATION, token)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"themeId\":\"theme_jelly\"}"))
@@ -104,7 +113,7 @@ class CreditShopIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON).content(theme))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.equippedThemeId").value("theme_neon"));
         mvc.perform(get(SHOP + "/accounts/me").header(HttpHeaders.AUTHORIZATION, token))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.coin").value(100))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.coin").value(250))
                 .andExpect(jsonPath("$.data.ownedThemeIds[0]").value("theme_neon"));
     }
 
