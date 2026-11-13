@@ -34,6 +34,13 @@ class CreditShopIntegrationTest {
     private static final String CREDIT = "/api/credit/v11";
     private static final String SHOP = "/api/shop/v11";
 
+    @Test
+    void defaultProfileDoesNotExposeLocalCoinGrants() {
+        assertThat(context.getBeansOfType(LocalCoinGrantController.class)).isEmpty();
+    }
+
+
+    @Autowired org.springframework.context.ApplicationContext context;
     @Autowired MockMvc mvc;
     @Autowired JsonMapper json;
     @Autowired JdbcClient jdbc;
