@@ -129,6 +129,17 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
                 }
                 hub.emote(roomId, user.id(), body.path("emote").asString());
             }
+            case "CURSOR" -> {
+                // Cursors are frequent and only decorative, so a malformed one is dropped instead of drawing an ERROR.
+                JsonNode pieceUid = body.path("pieceUid");
+                JsonNode row = body.path("row");
+                JsonNode col = body.path("col");
+                if ((pieceUid.isString() || pieceUid.isNull()) && (row.isInt() || row.isNull())
+                        && (col.isInt() || col.isNull())) {
+                    hub.cursor(roomId, user.id(), pieceUid.isNull() ? null : pieceUid.asString(),
+                            row.isNull() ? null : row.asInt(), col.isNull() ? null : col.asInt());
+                }
+            }
             default -> throw new GameException("INVALID_MESSAGE", "메시지 형식이 올바르지 않습니다.");
         }
     }
