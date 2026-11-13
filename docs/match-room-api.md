@@ -41,9 +41,9 @@
 | --- | --- | --- |
 | `WAITING` | 두 번째 참가자를 기다리는 중 | 1명 |
 | `FULL` | 정원이 찼으며 실제 게임 시작을 기다리는 중 | 2명 |
-| `PLAYING` | 두 참가자의 연결·수신 준비를 확인해 게임을 시작한 상태 | 2명 |
+| `PLAYING` | 두 참가자가 접속하고 참가자가 준비(`READY`)한 뒤 방장이 시작(`START`)한 상태 | 2명 |
 
-방 생성 시 `WAITING`, 두 번째 사용자 입장 시 `FULL`, 추후 WebSocket 게임 시작 처리 시 `PLAYING`으로 변경한다. 이번 구현은 HTTP API이며 WebSocket 연결과 게임 시작 처리는 포함하지 않는다. `FULL` 상태만으로 게임을 시작하지 않는다. 연결이 끊겨도 HTTP 입장 기록을 자동 삭제하지 않으며, 재접속·퇴장 정책은 별도 명세에서 다룬다.
+방 생성 시 `WAITING`, 두 번째 사용자 입장 시 `FULL`, WebSocket에서 방장이 `START`로 게임을 시작하면 `PLAYING`으로 변경한다(메시지 형식은 README의 대전 절 참고). 이번 구현은 HTTP API이며 WebSocket 연결과 게임 시작 처리는 포함하지 않는다. `FULL` 상태만으로 게임을 시작하지 않는다. 연결이 끊겨도 HTTP 입장 기록을 자동 삭제하지 않으며, 재접속·퇴장 정책은 별도 명세에서 다룬다.
 
 ## 2. API 목록
 
@@ -54,6 +54,7 @@
 | 방 삭제 | `DELETE` | `/api/match-room/{roomId}` | `204 No Content` |
 | 방 생성 | `POST` | `/api/match-room` | `201 Created` |
 | 코드로 입장 | `POST` | `/api/match-room/code/members` | `200 OK` |
+| 방 나가기 | `DELETE` | `/api/match-room/{roomId}/members/me` | `204 No Content` |
 
 ## 3. 매치 룸 전체 조회
 
@@ -248,7 +249,7 @@ DELETE /api/match-room/101
 
 삭제 후 같은 방 ID를 사용하는 입장·삭제 요청은 `404`가 된다. 같은 방을 삭제하는 재요청도 `404 ROOM_NOT_FOUND`다.
 
-WebSocket에 연결된 참가자가 있다면 삭제 완료 후 `ROOM_DELETED` 알림을 보내 대기 화면을 종료하도록 연계할 수 있다. 이 알림의 전송 형식과 재접속 처리는 WebSocket 명세에서 정의한다.
+WebSocket에 연결된 참가자에게는 삭제 완료 후 `{"type":"ROOM_CLOSED","reason":"ROOM_DELETED"}`를 보내고 연결을 닫는다.
 
 ### 오류 응답
 
@@ -410,6 +411,37 @@ ID 입장과 같은 참가자용 방 응답 구조를 사용한다. 공개 방�
 | `409` | `ROOM_FULL` | 신규 사용자가 정원이 찬 방에 입장 시도 |
 | `409` | `MATCH_ALREADY_STARTED` | 신규 사용자가 게임 진행 중인 방에 입장 시도 |
 
+## 7-1. 매치 룸 나가기
+
+### 기본 정보
+
+- Method: `DELETE`
+- URL: `/api/match-room/{roomId}/members/me`
+- 인증: 필요
+- 설명: 게임 시작 전에 로그인 사용자를 방에서 내보낸다.
+
+### 처리 규칙
+
+1. 방을 조회한다. 없으면 `404 ROOM_NOT_FOUND`.
+2. 요청자가 참가자가 아니면 `403 ROOM_MEMBER_ONLY`.
+3. 상태가 `PLAYING`이면 `409 MATCH_ALREADY_STARTED`. 게임 중에는 WebSocket `FORFEIT`을 사용한다.
+4. 방장이 나가면 방을 삭제한다. 접속한 모두에게 `ROOM_CLOSED`(`ROOM_DELETED`)를 보내고 연결을 닫는다.
+5. 참가자가 나가면 참가자 목록에서 제거하고 상태를 `WAITING`으로 바꾼다. 나간 사용자의 연결에는 `ROOM_CLOSED`(`LEFT_ROOM`)를 보내고 닫으며, 방장은 갱신된 `WAITING`을 받는다.
+
+### 성공 응답: 204 No Content
+
+응답 본문은 없다.
+
+### 오류 응답
+
+| HTTP 상태 | code | 조건 |
+| --- | --- | --- |
+| `400` | `INVALID_REQUEST` | 방 ID가 양의 정수가 아님 |
+| `401` | `UNAUTHENTICATED` | 로그인 정보가 없거나 유효하지 않음 |
+| `403` | `ROOM_MEMBER_ONLY` | 요청자가 해당 방의 참가자가 아님 |
+| `404` | `ROOM_NOT_FOUND` | 존재하지 않거나 삭제된 방 |
+| `409` | `MATCH_ALREADY_STARTED` | 해당 방의 게임이 이미 시작됨 |
+
 ## 8. 공통 응답 형식
 
 `common` 패키지의 공통 응답을 사용한다. 성공 응답은 `{"success":true,"data":응답데이터,"error":null}`, 실패 응답은 `{"success":false,"data":null,"error":{"code":"오류코드","message":"설명"}}`를 사용한다. 삭제 성공은 예외로 본문 없는 `204`다. 위 필드 설명의 방·목록 데이터는 모두 `data` 안에 위치한다.
@@ -431,6 +463,7 @@ ID 입장과 같은 참가자용 방 응답 구조를 사용한다. 공개 방�
 | `UNAUTHENTICATED` | `401` | 로그인이 필요합니다. |
 | `ROOM_CODE_REQUIRED` | `403` | 비공개 방은 입장 코드가 필요합니다. |
 | `ROOM_HOST_ONLY` | `403` | 방장만 방을 삭제할 수 있습니다. |
+| `ROOM_MEMBER_ONLY` | `403` | 방 참가자만 나갈 수 있습니다. |
 | `ROOM_NOT_FOUND` | `404` | 방을 찾을 수 없습니다. |
 | `ROOM_FULL` | `409` | 방 정원이 가득 찼습니다. |
 | `MATCH_ALREADY_STARTED` | `409` | 이미 게임이 시작된 방입니다. |

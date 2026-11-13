@@ -92,6 +92,34 @@ public class MatchRoom {
         return this;
     }
 
+    /** Starts the game; false if the members changed since the caller read {@code expected}. */
+    public boolean start(List<Member> expected) {
+        if (members.size() < MAX_PLAYERS || !members.equals(expected)) {
+            return false;
+        }
+        status = MatchRoomStatus.PLAYING;
+        return true;
+    }
+
+    /**
+     * Removes {@code user} before the game starts. Returns true when the host left, which closes the room:
+     * the caller deletes it.
+     */
+    public boolean leave(MatchRoomUser user) {
+        if (members.stream().noneMatch(member -> member.userId().equals(user.id()))) {
+            throw new MatchRoomException("ROOM_MEMBER_ONLY", "방 참가자만 나갈 수 있습니다.", 403);
+        }
+        if (status == MatchRoomStatus.PLAYING) {
+            throw new MatchRoomException("MATCH_ALREADY_STARTED", "이미 게임이 시작된 방입니다.", 409);
+        }
+        if (hostUserId.equals(user.id())) {
+            return true;
+        }
+        members.removeIf(member -> member.userId().equals(user.id()));
+        status = MatchRoomStatus.WAITING;
+        return false;
+    }
+
     public void checkDeletableBy(MatchRoomUser user) {
         if (!hostUserId.equals(user.id())) {
             throw new MatchRoomException("ROOM_HOST_ONLY", "방장만 방을 삭제할 수 있습니다.", 403);
