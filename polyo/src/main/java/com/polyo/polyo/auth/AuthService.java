@@ -52,6 +52,13 @@ public class AuthService {
                 new UserResponse(String.valueOf(user.getId()), user.getLoginId(), user.getNickname()));
     }
 
+    @Transactional(readOnly = true)
+    public UserResponse currentUser(long userId) {
+        return userRepository.findById(userId)
+                .map(user -> new UserResponse(String.valueOf(user.getId()), user.getLoginId(), user.getNickname()))
+                .orElseThrow(() -> new AuthException("UNAUTHENTICATED", "로그인이 필요합니다.", 401));
+    }
+
     private void validatePassword(String password) {
         if (!password.matches("^(?=.*[A-Za-z])(?=.*\\d)(?=.*[^A-Za-z\\d]).{8,64}$")) {
             throw new AuthException("INVALID_PASSWORD", "비밀번호 형식이 올바르지 않습니다.", 400);

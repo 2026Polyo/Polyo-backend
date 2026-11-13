@@ -55,6 +55,22 @@ class JwtAuthenticationTests {
     }
 
     @Test
+    void currentUserEndpointRequiresAndReturnsTheAuthenticatedUser() throws Exception {
+        JsonNode login = signupAndLogin();
+        String token = login.path("accessToken").asText();
+
+        mvc.perform(get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(login.path("user").path("id").asText()))
+                .andExpect(jsonPath("$.data.loginId").value(login.path("user").path("loginId").asText()))
+                .andExpect(jsonPath("$.data.nickname").value(login.path("user").path("nickname").asText()));
+
+        mvc.perform(get("/api/v1/auth/me"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("UNAUTHENTICATED"));
+    }
+
+    @Test
     void rejectsInvalidTokens() throws Exception {
         String valid = signupAndLogin().path("accessToken").asText();
         String expired = token("1", "만료", -60);
