@@ -30,18 +30,26 @@ public class SecurityConfig {
             JwtTokenProvider tokenProvider
     ) throws Exception {
         return http.csrf(AbstractHttpConfigurer::disable)
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                // The game socket authenticates with its first message, not with an HTTP header.
-                .authorizeHttpRequests(auth -> auth.requestMatchers("/api/v1/auth/**", "/ws/match/*").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/shop/v11/themes").permitAll()
-                        .anyRequest().authenticated())
-                .addFilterBefore(
-                        new JwtAuthenticationFilter(tokenProvider),
-                        UsernamePasswordAuthenticationFilter.class
-                )
-                .exceptionHandling(exceptions ->
-                        exceptions.authenticationEntryPoint(unauthenticated(jsonMapper)))
-                .build();
+        .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+        // The game socket authenticates with its first message, not with an HTTP header.
+        .authorizeHttpRequests(auth -> auth
+                // 회원가입 / 로그인은 비로그인 허용
+                .requestMatchers("/api/v1/auth/signup", "/api/v1/auth/login").permitAll()
+                // 게임 매치용 웹소켓 핸드셰이크는 허용
+                .requestMatchers("/ws/match/*").permitAll()
+                // 테마 목록 조회는 비로그인 허용
+                .requestMatchers(HttpMethod.GET, "/api/shop/v11/themes").permitAll()
+                // 나머지는 모두 인증 필요 (예: /api/v1/auth/me 등)
+                .anyRequest().authenticated()
+        )
+        .addFilterBefore(
+                new JwtAuthenticationFilter(tokenProvider),
+                UsernamePasswordAuthenticationFilter.class
+        )
+        .exceptionHandling(exceptions ->
+                exceptions.authenticationEntryPoint(unauthenticated(jsonMapper)))
+        .build();
+
     }
 
     @Bean
