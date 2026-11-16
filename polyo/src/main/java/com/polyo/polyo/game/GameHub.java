@@ -93,7 +93,7 @@ public class GameHub {
         WebSocketSession session = new ConcurrentWebSocketSessionDecorator(raw, SEND_TIME_LIMIT_MS, SEND_BUFFER_BYTES);
         RoomChannel channel = channels.computeIfAbsent(roomId, id -> new RoomChannel());
         synchronized (channel) {
-            // The channel may have finished while this request was on its way in.
+            // The channel may have been dropped while this request was on its way in.
             if (channels.get(roomId) != channel) {
                 throw new GameException("ROOM_CLOSED", "이미 끝난 방입니다.");
             }
@@ -339,24 +339,31 @@ public class GameHub {
             broadcastCurrent(channel);
             return;
         }
-        channels.remove(roomId, channel);
-        // Players must hear the result even if the room cannot be removed.
+        // The room outlives the game. Players must hear the result even if the room cannot be reopened.
         try {
             rooms.finish(roomId);
         } finally {
             broadcastCurrent(channel);
+            // Back to the waiting room: the guest readies again and the host starts the next game.
+            channel.game = null;
+            if (!removeIfIdle(roomId, channel)) {
+                broadcastCurrent(channel);
+            }
         }
     }
 
     private void scheduleTurnTimer(long roomId, RoomChannel channel) {
-        channel.turnTimer = timers.schedule(() -> expireTurn(roomId, channel),
-                channel.game.remainingTurnMs(), TimeUnit.MILLISECONDS);
+        MatchGame game = channel.game;
+        channel.turnTimer = timers.schedule(() -> expireTurn(roomId, channel, game),
+                game.remainingTurnMs(), TimeUnit.MILLISECONDS);
     }
 
-    private void expireTurn(long roomId, RoomChannel channel) {
+    private void expireTurn(long roomId, RoomChannel channel, MatchGame game) {
         try {
             synchronized (channel) {
-                if (channels.get(roomId) == channel && channel.game.expireTurn()) {
+                // The channel now outlives its games: this one may have ended, or been replaced by the next,
+                // while the timer waited for the lock.
+                if (channels.get(roomId) == channel && channel.game == game && game.expireTurn()) {
                     afterChange(roomId, channel);
                 }
             }

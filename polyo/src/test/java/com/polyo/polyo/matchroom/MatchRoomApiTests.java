@@ -211,6 +211,34 @@ class MatchRoomApiTests {
     }
 
     @Test
+    void finishedGameReopensTheRoom() throws Exception {
+        Client host = authenticatedUser();
+        Client guest = authenticatedUser();
+        Client outsider = authenticatedUser();
+        long id = createRoom(host, "한 판 더", false).path("roomId").asLong();
+        mvc.perform(post(ROOT + "/{id}/members", id).with(guest.authentication()).with(csrf()))
+                .andExpect(status().isOk());
+        service.markPlaying(id, service.membersOf(id, new MatchRoomUser(host.id(), host.nickname())));
+        mvc.perform(get(ROOT).with(host.authentication()).with(csrf()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(0));
+
+        service.finish(id);
+
+        // Both players are still in, so the room is FULL again: listed, but closed to newcomers.
+        mvc.perform(get(ROOT).with(host.authentication()).with(csrf()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.rooms[0].roomId").value(id))
+                .andExpect(jsonPath("$.data.rooms[0].status").value("FULL"))
+                .andExpect(jsonPath("$.data.rooms[0].playerCount").value(2));
+        mvc.perform(post(ROOT + "/{id}/members", id).with(outsider.authentication()).with(csrf()))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("ROOM_FULL"));
+        mvc.perform(delete(ROOT + "/{id}/members/me", id).with(guest.authentication()).with(csrf()))
+                .andExpect(status().isNoContent());
+        mvc.perform(post(ROOT + "/{id}/members", id).with(host.authentication()).with(csrf()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("WAITING"))
+                .andExpect(jsonPath("$.data.playerCount").value(1));
+    }
+
+    @Test
     void requestsWithoutDomainUserIdentityAreRejected() throws Exception {
         mvc.perform(post(ROOT).with(user("external-principal")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)

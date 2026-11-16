@@ -189,6 +189,87 @@ class GameSocketTests {
         assertThat(finished.path("status").asString()).isEqualTo("FINISHED");
         assertThat(finished.path("winnerUserId").asString()).isEqualTo(waiter.user.id());
         assertThat(finished.path("finishReason").asString()).isEqualTo("FORFEIT");
+        assertThat(repository.findById(roomId).orElseThrow().status()).isEqualTo(MatchRoomStatus.FULL);
+    }
+
+    @Test
+    void finishedGameKeepsTheRoomForTheNextGame() throws Exception {
+        MatchRoomUser hostUser = newUser();
+        MatchRoomUser guestUser = newUser();
+        long roomId = fullRoom(hostUser, guestUser);
+        Client host = new Client(hostUser, roomId);
+        Client guest = new Client(guestUser, roomId);
+        host.authenticate();
+        guest.authenticate();
+        guest.next("WAITING");
+        JsonNode first = startGame(host, guest);
+        Client mover = hostUser.id().equals(first.path("turnUserId").asString()) ? host : guest;
+        mover.send(Map.of("type", "PLACE", "pieceUid", first.path("tray").get(0).path("uid").asString(),
+                "row", 0, "col", 0));
+        host.next("STATE");
+        guest.next("STATE");
+        guest.send(Map.of("type", "FORFEIT"));
+
+        // The result comes first, then the waiting room both players are back in, with nobody ready.
+        List<JsonNode> afterGame = host.until("WAITING");
+        assertThat(types(afterGame)).containsExactly("STATE", "WAITING");
+        assertThat(afterGame.getFirst().path("status").asString()).isEqualTo("FINISHED");
+        JsonNode waiting = afterGame.getLast();
+        assertThat(waiting.path("connectedUserIds").size()).isEqualTo(2);
+        assertThat(waiting.path("readyUserIds").size()).isZero();
+        assertThat(waiting.path("members").size()).isEqualTo(2);
+        assertThat(types(guest.until("WAITING"))).containsExactly("STATE", "WAITING");
+        assertThat(repository.findById(roomId).orElseThrow().status()).isEqualTo(MatchRoomStatus.FULL);
+        assertThat(rooms.membersOf(roomId, hostUser)).hasSize(2);
+
+        // The same room plays again, from scratch, once the guest readies and the host starts.
+        host.send(Map.of("type", "START"));
+        assertThat(host.next("ERROR").path("code").asString()).isEqualTo("OPPONENT_NOT_READY");
+        JsonNode next = startGame(host, guest);
+        assertThat(next.path("status").asString()).isEqualTo("PLAYING");
+        assertThat(next.path("lastMove").isNull()).isTrue();
+        for (JsonNode player : next.path("players")) {
+            assertThat(player.path("score").asInt()).isZero();
+            for (JsonNode row : player.path("board")) {
+                row.forEach(cell -> assertThat(cell.isNull()).isTrue());
+            }
+        }
+        assertThat(repository.findById(roomId).orElseThrow().status()).isEqualTo(MatchRoomStatus.PLAYING);
+
+        host.send(Map.of("type", "FORFEIT"));
+        assertThat(guest.next("STATE").path("winnerUserId").asString()).isEqualTo(guestUser.id());
+    }
+
+    @Test
+    void afterTheGamePlayersMayComeBackOrLeave() throws Exception {
+        MatchRoomUser hostUser = newUser();
+        MatchRoomUser guestUser = newUser();
+        long roomId = fullRoom(hostUser, guestUser);
+        Client host = new Client(hostUser, roomId);
+        Client guest = new Client(guestUser, roomId);
+        host.authenticate();
+        guest.authenticate();
+        guest.next("WAITING");
+        startGame(host, guest);
+        host.send(Map.of("type", "FORFEIT"));
+        host.until("WAITING");
+        guest.until("WAITING");
+
+        // A player who comes back after the game finds the waiting room, not the old result.
+        host.session.close();
+        assertThat(guest.next("WAITING").path("connectedUserIds").size()).isEqualTo(1);
+        Client hostAgain = new Client(hostUser, roomId);
+        hostAgain.authenticate();
+        assertThat(types(hostAgain.until("WAITING"))).containsExactly("WAITING");
+        guest.next("WAITING");
+
+        // Leaving and deleting work as they do before a game.
+        rooms.leave(roomId, guestUser);
+        assertThat(guest.next("ROOM_CLOSED").path("reason").asString()).isEqualTo("LEFT_ROOM");
+        assertThat(hostAgain.next("WAITING").path("members").size()).isEqualTo(1);
+        assertThat(repository.findById(roomId).orElseThrow().status()).isEqualTo(MatchRoomStatus.WAITING);
+        rooms.delete(roomId, hostUser);
+        assertThat(hostAgain.next("ROOM_CLOSED").path("reason").asString()).isEqualTo("ROOM_DELETED");
         assertThat(repository.findById(roomId)).isEmpty();
     }
 
@@ -402,8 +483,7 @@ class GameSocketTests {
         guest.send(Map.of("type", "EMOTE", "emote", "wow"));
         assertThat(types(mover.until("EMOTE"))).doesNotContain("CURSOR", "ERROR");
 
-        // Once the game is over its channel is gone, so an emote would fail with ROOM_CLOSED. A cursor is
-        // still dropped quietly: the unknown emote's ERROR is the first one back.
+        // Once the game is over a cursor is dropped quietly too: the unknown emote's ERROR is the first one back.
         mover.send(Map.of("type", "FORFEIT"));
         waiter.next("STATE");
         mover.send(cursor(uid, 0, 0));
