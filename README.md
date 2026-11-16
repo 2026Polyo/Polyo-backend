@@ -76,11 +76,12 @@ cd polyo
 - 접속: `ws://{host}/ws/match/{roomId}`. 브라우저 WebSocket에는 헤더를 넣을 수 없으므로 첫 메시지로 `{"type":"AUTH","token":"<JWT>"}`를 보냅니다. 10초 안에 AUTH가 오지 않으면 `ERROR`(`AUTH_TIMEOUT`)를 보내고 연결을 닫습니다(`app.game.auth-timeout-ms`로 변경).
 - 시작: 두 명이 접속해도 바로 시작하지 않습니다. 참가자가 `READY`로 준비하고, 방장이 `START`를 보내면 방을 `PLAYING`으로 바꾸고 게임을 시작합니다. 선공은 무작위입니다. 참가자의 연결이 끊기거나 참가자가 나가면 준비가 풀립니다. 거절 코드: `NOT_HOST`(참가자가 START), `OPPONENT_NOT_CONNECTED`, `OPPONENT_NOT_READY`, `HOST_CANNOT_READY`, `GAME_ALREADY_STARTED`, `ROOM_CHANGED`(확인 중 참가자가 바뀜).
 - 감정표현: `EMOTE`를 보내면 방의 모두(보낸 사람 포함)에게 `{"type":"EMOTE","userId":"...","emote":"..."}`로 전달합니다. `emote`는 `smile`, `laugh`, `wow`, `sad`, `angry`, `cool` 중 하나이고, 그 외 값은 `ERROR`(`INVALID_EMOTE`)입니다. 한 사람이 500ms 안에 다시 보낸 감정표현은 오류 없이 버립니다.
+- 블록 미리보기: 게임 중 자기 차례인 사람이 `CURSOR`를 보내면 서버는 판정하지 않고 상대에게만 `{"type":"CURSOR","userId":"...","pieceUid":"...","row":3,"col":5}`로 전달합니다(감정표현과 달리 보낸 사람에게는 돌려보내지 않음). `pieceUid`는 들고 있는 블록의 uid이고 없으면 `null`, `row`/`col`은 `PLACE`와 같은 좌표이며 놓을 곳이 없으면 둘 다 `null`입니다. 자주 오는 장식용 메시지라 다음 경우에는 `ERROR` 없이 버립니다: 게임 전·후, 상대 차례, 형식 오류(타입이 다름, `pieceUid` 64자 초과, `row`/`col` 중 하나만 `null`, -8~7 범위 밖), 한 사람이 50ms 안에 다시 보낸 경우.
 - 규칙: 공용 블록 6개를 번갈아 하나씩 자기 보드에 놓고, 6개를 다 쓰면 새로 6개를 받습니다. 블록마다 15% 확률로 특수 블록(고스트·라인·에코·황금·폭탄·채움·강화)이 나옵니다.
 - 시간: 한 수 제한시간은 10초에서 시작하고 자기 점수에 따라 하드모드처럼 줄어 최소 2.8초가 됩니다.
 - 패배: 내 차례에 놓을 블록이 없음(`NO_MOVES`), 시간 초과(`TIMEOUT`), 기권(`FORFEIT`).
-- 클라이언트 메시지: `{"type":"READY","ready":true}`, `{"type":"START"}`, `{"type":"EMOTE","emote":"laugh"}`, `{"type":"PLACE","pieceUid":"...","row":0,"col":0}`, `{"type":"FORFEIT"}`
-- 서버 메시지: 시작 전 `WAITING`(`connectedUserIds`, `readyUserIds`, `hostUserId`, `members`), 감정표현 `EMOTE`, 시작 후 변경마다 전체 상태 `STATE`, 잘못된 요청에는 `ERROR`(`code`, `message`). 대기 중 방이 삭제되면(방장의 삭제·나가기) 접속한 모두에게, 참가자가 나가면 그 참가자에게 `ROOM_CLOSED`(`reason`: `ROOM_DELETED` 또는 `LEFT_ROOM`)를 보내고 연결을 닫습니다. 남은 사람은 갱신된 `WAITING`을 받습니다. `STATE`의 `turnRemainingMs`는 남은 시간이라 서버와 클라이언트의 시계 차이와 무관합니다.
+- 클라이언트 메시지: `{"type":"READY","ready":true}`, `{"type":"START"}`, `{"type":"EMOTE","emote":"laugh"}`, `{"type":"PLACE","pieceUid":"...","row":0,"col":0}`, `{"type":"CURSOR","pieceUid":"...","row":0,"col":0}`, `{"type":"FORFEIT"}`
+- 서버 메시지: 시작 전 `WAITING`(`connectedUserIds`, `readyUserIds`, `hostUserId`, `members`), 감정표현 `EMOTE`, 상대의 블록 미리보기 `CURSOR`, 시작 후 변경마다 전체 상태 `STATE`, 잘못된 요청에는 `ERROR`(`code`, `message`). 대기 중 방이 삭제되면(방장의 삭제·나가기) 접속한 모두에게, 참가자가 나가면 그 참가자에게 `ROOM_CLOSED`(`reason`: `ROOM_DELETED` 또는 `LEFT_ROOM`)를 보내고 연결을 닫습니다. 남은 사람은 갱신된 `WAITING`을 받습니다. `STATE`의 `turnRemainingMs`는 남은 시간이라 서버와 클라이언트의 시계 차이와 무관합니다.
 - 재접속: 같은 사용자가 다시 접속하면 이전 연결을 닫고 현재 상태를 보냅니다. 끊긴 동안에도 시간은 흐릅니다.
 - 종료: 결과를 보낸 뒤 방을 삭제합니다. 결과는 아직 저장하지 않습니다.
 
