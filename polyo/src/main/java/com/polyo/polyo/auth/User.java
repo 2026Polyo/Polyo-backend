@@ -7,6 +7,9 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Getter;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Entity
 @Getter
@@ -31,6 +34,21 @@ public class User {
     @Column(nullable = false)
     private int trophy = 0;
 
+    @Column(name = "avatar_block_id", nullable = false, length = 50)
+    private String avatarBlockId = "tetromino-t-down";
+
+    @Column(name = "avatar_block_color", nullable = false, length = 30)
+    private String avatarBlockColor = "cyan";
+
+    @Column(name = "avatar_background_color", nullable = false, length = 30)
+    private String avatarBackgroundColor = "#d9f4ff";
+
+    @Column(name = "equipped_base_blocks", nullable = false, length = 1000)
+    private String equippedBaseBlocks = "";
+
+    @Column(name = "equipped_special_blocks", nullable = false, length = 1000)
+    private String equippedSpecialBlocks = "";
+
     protected User() {
     }
 
@@ -42,6 +60,29 @@ public class User {
 
     public static User create(String loginId, String password, String nickname) {
         return new User(loginId, password, nickname);
+    }
+
+    public void updateProfile(String nickname, String avatarBlockId, String avatarBlockColor,
+                              String avatarBackgroundColor, List<String> baseBlocks,
+                              List<String> specialBlocks) {
+        this.nickname = nickname;
+        this.avatarBlockId = avatarBlockId;
+        this.avatarBlockColor = avatarBlockColor;
+        this.avatarBackgroundColor = avatarBackgroundColor;
+        this.equippedBaseBlocks = join(baseBlocks);
+        this.equippedSpecialBlocks = join(specialBlocks);
+    }
+
+    public List<String> getEquippedBaseBlockList() { return split(equippedBaseBlocks); }
+    public List<String> getEquippedSpecialBlockList() { return split(equippedSpecialBlocks); }
+
+    private static String join(List<String> values) {
+        return String.join(",", values == null ? List.of() : values);
+    }
+
+    private static List<String> split(String value) {
+        if (value == null || value.isBlank()) return List.of();
+        return Arrays.stream(value.split(",")).filter(item -> !item.isBlank()).collect(Collectors.toList());
     }
 
 }
