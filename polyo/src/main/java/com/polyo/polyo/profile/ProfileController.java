@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PathVariable;
 
 @RestController
 @RequestMapping("/api/v1/profile")
@@ -20,6 +21,11 @@ public class ProfileController {
     @GetMapping
     public ResponseEntity<ApiResponse<ProfileResponse>> get(Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.success(profileService.get(Long.parseLong(authentication.getName()))));
+    }
+
+    @GetMapping("/{userId}")
+    public ResponseEntity<ApiResponse<ProfileResponse>> getByUserId(@PathVariable long userId) {
+        return ResponseEntity.ok(ApiResponse.success(profileService.get(userId)));
     }
 
     @PatchMapping
