@@ -3,6 +3,8 @@ package com.polyo.polyo.game;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.polyo.polyo.TestcontainersConfiguration;
+import com.polyo.polyo.auth.User;
+import com.polyo.polyo.auth.UserRepository;
 import com.polyo.polyo.matchroom.CreateMatchRoomRequest;
 import com.polyo.polyo.matchroom.MatchRoomRepository;
 import com.polyo.polyo.matchroom.MatchRoomService;
@@ -44,6 +46,7 @@ class GameSocketTests {
     @LocalServerPort int port;
     @Autowired MatchRoomService rooms;
     @Autowired MatchRoomRepository repository;
+    @Autowired UserRepository users;
     @Autowired JsonMapper json;
     @Value("${app.auth.jwt-secret}") String secret;
 
@@ -102,6 +105,17 @@ class GameSocketTests {
     private MatchRoomUser newUser() {
         int id = SEQUENCE.incrementAndGet();
         return new MatchRoomUser(String.valueOf(id), "user" + id);
+    }
+
+    /** A user stored in the users table, for tests that read or change what is saved about them. */
+    private MatchRoomUser storedUser() {
+        int sequence = SEQUENCE.incrementAndGet();
+        User user = users.save(User.create("trophy" + sequence, "password", "trophy" + sequence));
+        return new MatchRoomUser(String.valueOf(user.getId()), user.getNickname());
+    }
+
+    private int trophiesOf(MatchRoomUser user) {
+        return users.findById(Long.valueOf(user.id())).orElseThrow().getTrophy();
     }
 
     private String token(MatchRoomUser user) {
@@ -238,6 +252,41 @@ class GameSocketTests {
 
         host.send(Map.of("type", "FORFEIT"));
         assertThat(guest.next("STATE").path("winnerUserId").asString()).isEqualTo(guestUser.id());
+    }
+
+    @Test
+    void winnerGainsTrophiesEachGameAndTheLoserKeepsTheirs() throws Exception {
+        MatchRoomUser hostUser = storedUser();
+        MatchRoomUser guestUser = storedUser();
+        long roomId = fullRoom(hostUser, guestUser);
+        Client host = new Client(hostUser, roomId);
+        Client guest = new Client(guestUser, roomId);
+        host.authenticate();
+        guest.authenticate();
+        guest.next("WAITING");
+
+        JsonNode playing = startGame(host, guest);
+        assertThat(playing.path("trophyReward").isNull()).isTrue();
+        guest.send(Map.of("type", "FORFEIT"));
+        JsonNode finished = host.next("STATE");
+        guest.next("STATE");
+        JsonNode reward = finished.path("trophyReward");
+        assertThat(reward.path("userId").asString()).isEqualTo(hostUser.id());
+        assertThat(reward.path("gained").asInt()).isEqualTo(TrophyService.TROPHIES_PER_WIN);
+        assertThat(reward.path("trophy").asInt()).isEqualTo(TrophyService.TROPHIES_PER_WIN);
+        assertThat(trophiesOf(hostUser)).isEqualTo(TrophyService.TROPHIES_PER_WIN);
+        assertThat(trophiesOf(guestUser)).isZero();
+
+        // A rematch in the same room adds to the total; the game is reset but the trophies are not.
+        host.next("WAITING");
+        guest.next("WAITING");
+        JsonNode rematch = startGame(host, guest);
+        assertThat(rematch.path("trophyReward").isNull()).isTrue();
+        guest.send(Map.of("type", "FORFEIT"));
+        assertThat(host.next("STATE").path("trophyReward").path("trophy").asInt())
+                .isEqualTo(2 * TrophyService.TROPHIES_PER_WIN);
+        assertThat(trophiesOf(hostUser)).isEqualTo(2 * TrophyService.TROPHIES_PER_WIN);
+        assertThat(trophiesOf(guestUser)).isZero();
     }
 
     @Test
