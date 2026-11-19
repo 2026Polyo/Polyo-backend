@@ -83,7 +83,8 @@ cd polyo
 - 클라이언트 메시지: `{"type":"READY","ready":true}`, `{"type":"START"}`, `{"type":"EMOTE","emote":"laugh"}`, `{"type":"PLACE","pieceUid":"...","row":0,"col":0}`, `{"type":"CURSOR","pieceUid":"...","row":0,"col":0}`, `{"type":"FORFEIT"}`
 - 서버 메시지: 게임 전과 끝난 뒤 `WAITING`(`connectedUserIds`, `readyUserIds`, `hostUserId`, `members`), 감정표현 `EMOTE`, 상대의 블록 미리보기 `CURSOR`, 시작 후 변경마다 전체 상태 `STATE`, 잘못된 요청에는 `ERROR`(`code`, `message`). 대기 중 방이 삭제되면(방장의 삭제·나가기) 접속한 모두에게, 참가자가 나가면 그 참가자에게 `ROOM_CLOSED`(`reason`: `ROOM_DELETED` 또는 `LEFT_ROOM`)를 보내고 연결을 닫습니다. 남은 사람은 갱신된 `WAITING`을 받습니다. `STATE`의 `turnRemainingMs`는 남은 시간이라 서버와 클라이언트의 시계 차이와 무관합니다.
 - 재접속: 같은 사용자가 다시 접속하면 이전 연결을 닫고 현재 상태를 보냅니다. 끊긴 동안에도 시간은 흐릅니다.
-- 종료: 결과(`status`가 `FINISHED`인 `STATE`)를 보낸 뒤에도 방과 연결을 유지합니다. 방은 `FULL`로 돌아가고, 이어서 아무도 준비하지 않은 `WAITING`을 보냅니다. 참가자가 다시 준비하고 방장이 시작하면 같은 방에서 새 게임을 하며, 나가기·삭제도 게임 전과 같습니다. 끝난 뒤 다시 접속하면 결과 대신 `WAITING`을 받습니다. 결과는 아직 저장하지 않습니다.
+- 종료: 결과(`status`가 `FINISHED`인 `STATE`)를 보낸 뒤에도 방과 연결을 유지합니다. 방은 `FULL`로 돌아가고, 이어서 아무도 준비하지 않은 `WAITING`을 보냅니다. 참가자가 다시 준비하고 방장이 시작하면 같은 방에서 새 게임을 하며, 나가기·삭제도 게임 전과 같습니다. 끝난 뒤 다시 접속하면 결과 대신 `WAITING`을 받습니다. 대전 기록은 아직 저장하지 않습니다.
+- 트로피: 이긴 사람은 사유(`NO_MOVES`·`TIMEOUT`·`FORFEIT`)와 관계없이 게임마다 트로피 30개를 받고, 진 사람의 트로피는 줄지 않습니다. 끝난 `STATE`의 `trophyReward`(`userId`, `gained`, `trophy`: 받은 뒤 총 트로피)로 알려 주며, 진행 중이거나 저장하지 못한 경우(가입 기록이 없는 사용자 등)에는 `null`입니다. 저장에 실패해도 결과는 그대로 보냅니다. 트로피는 프로필의 `trophyCount`와 `trophy` 랭킹에 바로 반영됩니다.
 
 게임 상태는 서버 메모리에만 있습니다. 서버가 재시작되면 진행 중이던 게임은 사라지고, 두 참가자가 다시 접속해 준비하고 방장이 시작하면 새 게임이 시작됩니다.
 
