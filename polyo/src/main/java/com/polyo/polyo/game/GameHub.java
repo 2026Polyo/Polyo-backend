@@ -47,12 +47,14 @@ public class GameHub {
     private static final int MAX_CURSOR_PIECE_UID_LENGTH = 64;
 
     private final MatchRoomService rooms;
+    private final TrophyService trophies;
     private final JsonMapper json;
     private final Map<Long, RoomChannel> channels = new ConcurrentHashMap<>();
     private final ScheduledExecutorService timers = Executors.newSingleThreadScheduledExecutor();
 
-    public GameHub(MatchRoomService rooms, JsonMapper json) {
+    public GameHub(MatchRoomService rooms, TrophyService trophies, JsonMapper json) {
         this.rooms = rooms;
+        this.trophies = trophies;
         this.json = json;
     }
 
@@ -65,6 +67,8 @@ public class GameHub {
         String hostUserId;
         List<MatchRoom.Member> members = List.of();
         MatchGame game;
+        /** What the finished game's winner got, shown in its last STATE. */
+        TrophyService.Reward trophyReward;
         ScheduledFuture<?> turnTimer;
     }
 
@@ -93,7 +97,7 @@ public class GameHub {
         WebSocketSession session = new ConcurrentWebSocketSessionDecorator(raw, SEND_TIME_LIMIT_MS, SEND_BUFFER_BYTES);
         RoomChannel channel = channels.computeIfAbsent(roomId, id -> new RoomChannel());
         synchronized (channel) {
-            // The channel may have finished while this request was on its way in.
+            // The channel may have been dropped while this request was on its way in.
             if (channels.get(roomId) != channel) {
                 throw new GameException("ROOM_CLOSED", "이미 끝난 방입니다.");
             }
@@ -339,24 +343,39 @@ public class GameHub {
             broadcastCurrent(channel);
             return;
         }
-        channels.remove(roomId, channel);
-        // Players must hear the result even if the room cannot be removed.
+        // A game finishes once (later moves are rejected and its timer does nothing), so the win is
+        // counted once. A failed save is logged rather than thrown: the players must still get the result.
+        try {
+            channel.trophyReward = trophies.awardWin(channel.game.winnerUserId()).orElse(null);
+        } catch (RuntimeException exception) {
+            log.error("Failed to award trophies to {} in room {}", channel.game.winnerUserId(), roomId, exception);
+        }
+        // The room outlives the game. Players must hear the result even if the room cannot be reopened.
         try {
             rooms.finish(roomId);
         } finally {
             broadcastCurrent(channel);
+            // Back to the waiting room: the guest readies again and the host starts the next game.
+            channel.game = null;
+            channel.trophyReward = null;
+            if (!removeIfIdle(roomId, channel)) {
+                broadcastCurrent(channel);
+            }
         }
     }
 
     private void scheduleTurnTimer(long roomId, RoomChannel channel) {
-        channel.turnTimer = timers.schedule(() -> expireTurn(roomId, channel),
-                channel.game.remainingTurnMs(), TimeUnit.MILLISECONDS);
+        MatchGame game = channel.game;
+        channel.turnTimer = timers.schedule(() -> expireTurn(roomId, channel, game),
+                game.remainingTurnMs(), TimeUnit.MILLISECONDS);
     }
 
-    private void expireTurn(long roomId, RoomChannel channel) {
+    private void expireTurn(long roomId, RoomChannel channel, MatchGame game) {
         try {
             synchronized (channel) {
-                if (channels.get(roomId) == channel && channel.game.expireTurn()) {
+                // The channel now outlives its games: this one may have ended, or been replaced by the next,
+                // while the timer waited for the lock.
+                if (channels.get(roomId) == channel && channel.game == game && game.expireTurn()) {
                     afterChange(roomId, channel);
                 }
             }
@@ -367,7 +386,7 @@ public class GameHub {
 
     private void broadcastCurrent(RoomChannel channel) {
         Object message = channel.game != null
-                ? GameStateMessage.of(channel.game, channel.sessions.keySet())
+                ? GameStateMessage.of(channel.game, channel.sessions.keySet(), channel.trophyReward)
                 : new ConnectedMessage("WAITING", Set.copyOf(channel.sessions.keySet()), Set.copyOf(channel.ready),
                         channel.hostUserId, channel.members);
         String payload = json.writeValueAsString(message);

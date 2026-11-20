@@ -96,10 +96,10 @@ public class MatchRoomService {
         return repository.findByIdForUpdate(roomId).orElseThrow(MatchRoomException::notFound).start(expected);
     }
 
-    /** A finished room is removed: matches are one game long and results are not stored yet. */
+    /** A finished game keeps its room: both members stay, to play again or to leave. Only trophies are stored (see GameHub). */
     @Transactional
     public void finish(long roomId) {
-        repository.findByIdForUpdate(roomId).ifPresent(repository::delete);
+        repository.findByIdForUpdate(roomId).ifPresent(MatchRoom::finish);
     }
 
     private String allocateEntryCode() {

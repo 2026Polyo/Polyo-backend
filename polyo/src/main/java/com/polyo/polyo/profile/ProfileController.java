@@ -27,7 +27,6 @@ public class ProfileController {
     public ResponseEntity<ApiResponse<ProfileResponse>> getByUserId(@PathVariable long userId) {
         return ResponseEntity.ok(ApiResponse.success(profileService.get(userId)));
     }
-
     @PatchMapping
     public ResponseEntity<ApiResponse<ProfileResponse>> update(Authentication authentication,
                                                                @Valid @RequestBody ProfileRequest request) {
