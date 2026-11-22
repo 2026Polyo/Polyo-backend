@@ -10,7 +10,7 @@ import java.util.UUID;
 
 /** Block shapes and tray generation; shapes mirror the frontend's constants/gameData.ts. */
 final class PieceCatalog {
-    static final int TRAY_SIZE = 6;
+    static final int TRAY_SIZE = 5;
     /** Chance that a tray slot holds a special block. */
     static final double SPECIAL_CHANCE = 0.15;
 
