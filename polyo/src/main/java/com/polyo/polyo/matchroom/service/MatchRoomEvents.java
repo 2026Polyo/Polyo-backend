@@ -1,4 +1,4 @@
-package com.polyo.polyo.matchroom;
+package com.polyo.polyo.matchroom.service;
 
 /** Room changes that connected game sockets must hear about. Published inside the changing transaction. */
 public final class MatchRoomEvents {

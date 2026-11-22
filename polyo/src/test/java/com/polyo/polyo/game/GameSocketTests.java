@@ -5,11 +5,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.polyo.polyo.TestcontainersConfiguration;
 import com.polyo.polyo.auth.User;
 import com.polyo.polyo.auth.UserRepository;
-import com.polyo.polyo.matchroom.CreateMatchRoomRequest;
-import com.polyo.polyo.matchroom.MatchRoomRepository;
-import com.polyo.polyo.matchroom.MatchRoomService;
-import com.polyo.polyo.matchroom.MatchRoomStatus;
-import com.polyo.polyo.matchroom.MatchRoomUser;
+import com.polyo.polyo.credit.service.ThemeShop;
+import com.polyo.polyo.matchroom.dto.CreateMatchRoomRequest;
+import com.polyo.polyo.matchroom.dto.MatchRoomUser;
+import com.polyo.polyo.matchroom.entity.MatchRoomStatus;
+import com.polyo.polyo.matchroom.repository.MatchRoomRepository;
+import com.polyo.polyo.matchroom.service.MatchRoomService;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
@@ -29,6 +30,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
@@ -48,6 +50,8 @@ class GameSocketTests {
     @Autowired MatchRoomRepository repository;
     @Autowired UserRepository users;
     @Autowired JsonMapper json;
+    @Autowired JdbcClient jdbc;
+    @Autowired ThemeShop themes;
     @Value("${app.auth.jwt-secret}") String secret;
 
     private final class Client extends TextWebSocketHandler {
@@ -179,6 +183,9 @@ class GameSocketTests {
         assertThat(state.path("status").asString()).isEqualTo("PLAYING");
         assertThat(state.path("tray").size()).isEqualTo(6);
         assertThat(state.path("players").size()).isEqualTo(2);
+        // Users who are not stored have nothing equipped.
+        state.path("players").forEach(player ->
+                assertThat(player.path("themeId").asString()).isEqualTo(ThemeShop.CLASSIC_THEME));
         assertThat(state.path("turnRemainingMs").asLong()).isBetween(1L, 10_000L);
         assertThat(repository.findById(roomId).orElseThrow().status()).isEqualTo(MatchRoomStatus.PLAYING);
 
@@ -287,6 +294,45 @@ class GameSocketTests {
                 .isEqualTo(2 * TrophyService.TROPHIES_PER_WIN);
         assertThat(trophiesOf(hostUser)).isEqualTo(2 * TrophyService.TROPHIES_PER_WIN);
         assertThat(trophiesOf(guestUser)).isZero();
+    }
+
+    @Test
+    void eachPlayerCarriesTheThemeTheyEquippedWhenTheGameStarted() throws Exception {
+        MatchRoomUser hostUser = storedUser();
+        MatchRoomUser guestUser = storedUser();
+        jdbc.sql("INSERT INTO theme_order_history (user_id, theme_id, paid_coin) VALUES (:userId, 'theme_neon', 0)")
+                .param("userId", Long.parseLong(hostUser.id())).update();
+        themes.equip(Long.parseLong(hostUser.id()), "theme_neon");
+        long roomId = fullRoom(hostUser, guestUser);
+        Client host = new Client(hostUser, roomId);
+        Client guest = new Client(guestUser, roomId);
+        host.authenticate();
+        guest.authenticate();
+        guest.next("WAITING");
+
+        JsonNode state = startGame(host, guest);
+        assertThat(themeIdsByUser(state)).containsExactlyInAnyOrderEntriesOf(
+                Map.of(hostUser.id(), "theme_neon", guestUser.id(), ThemeShop.CLASSIC_THEME));
+
+        // Both screens get both themes, and a change made mid-game waits for the next game.
+        themes.equip(Long.parseLong(hostUser.id()), ThemeShop.CLASSIC_THEME);
+        host.session.close();
+        Client hostAgain = new Client(hostUser, roomId);
+        hostAgain.authenticate();
+        assertThat(themeIdsByUser(hostAgain.next("STATE"))).containsEntry(hostUser.id(), "theme_neon");
+        guest.send(Map.of("type", "FORFEIT"));
+        hostAgain.until("WAITING");
+        guest.until("WAITING");
+
+        JsonNode rematch = startGame(hostAgain, guest);
+        assertThat(themeIdsByUser(rematch)).containsEntry(hostUser.id(), ThemeShop.CLASSIC_THEME);
+    }
+
+    private static Map<String, String> themeIdsByUser(JsonNode state) {
+        Map<String, String> themeIds = new HashMap<>();
+        state.path("players").forEach(player ->
+                themeIds.put(player.path("userId").asString(), player.path("themeId").asString()));
+        return themeIds;
     }
 
     @Test

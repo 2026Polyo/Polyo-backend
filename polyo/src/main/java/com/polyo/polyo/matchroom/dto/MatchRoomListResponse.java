@@ -1,6 +1,8 @@
-package com.polyo.polyo.matchroom;
+package com.polyo.polyo.matchroom.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.polyo.polyo.matchroom.entity.MatchRoom;
+import com.polyo.polyo.matchroom.entity.MatchRoomStatus;
 import java.time.Instant;
 import java.util.List;
 

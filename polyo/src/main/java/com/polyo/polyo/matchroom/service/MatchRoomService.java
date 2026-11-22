@@ -1,5 +1,13 @@
-package com.polyo.polyo.matchroom;
+package com.polyo.polyo.matchroom.service;
 
+import com.polyo.polyo.matchroom.dto.CreateMatchRoomRequest;
+import com.polyo.polyo.matchroom.dto.JoinByCodeRequest;
+import com.polyo.polyo.matchroom.dto.MatchRoomListResponse;
+import com.polyo.polyo.matchroom.dto.MatchRoomResponse;
+import com.polyo.polyo.matchroom.dto.MatchRoomUser;
+import com.polyo.polyo.matchroom.entity.MatchRoom;
+import com.polyo.polyo.matchroom.entity.MatchRoomStatus;
+import com.polyo.polyo.matchroom.repository.MatchRoomRepository;
 import java.util.List;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;

@@ -96,6 +96,14 @@ public class ThemeShop {
         return account(userId, coin);
     }
 
+    /** The theme this user plays with: {@link #CLASSIC_THEME} when none is equipped or the user is not stored. */
+    @Transactional(readOnly = true)
+    public String equippedThemeId(long userId) {
+        return jdbc.sql("SELECT COALESCE(equipped_theme_id, 'theme_classic') FROM users WHERE id = :userId")
+                .param("userId", userId).query(String.class).optional()
+                .orElse(CLASSIC_THEME);
+    }
+
     private boolean owns(long userId, String themeId) {
         return jdbc.sql("""
                 SELECT EXISTS(SELECT 1 FROM theme_order_history WHERE user_id = :userId AND theme_id = :themeId)

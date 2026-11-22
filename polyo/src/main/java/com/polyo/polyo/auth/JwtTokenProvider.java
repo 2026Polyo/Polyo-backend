@@ -1,6 +1,6 @@
 package com.polyo.polyo.auth;
 
-import com.polyo.polyo.matchroom.MatchRoomUser;
+import com.polyo.polyo.matchroom.dto.MatchRoomUser;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;

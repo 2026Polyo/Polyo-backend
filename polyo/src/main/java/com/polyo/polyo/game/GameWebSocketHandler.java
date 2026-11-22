@@ -1,8 +1,8 @@
 package com.polyo.polyo.game;
 
 import com.polyo.polyo.auth.JwtTokenProvider;
-import com.polyo.polyo.matchroom.MatchRoomException;
-import com.polyo.polyo.matchroom.MatchRoomUser;
+import com.polyo.polyo.matchroom.dto.MatchRoomUser;
+import com.polyo.polyo.matchroom.service.MatchRoomException;
 import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.util.Optional;

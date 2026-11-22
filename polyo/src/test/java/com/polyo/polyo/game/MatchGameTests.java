@@ -3,7 +3,7 @@ package com.polyo.polyo.game;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.polyo.polyo.matchroom.MatchRoom;
+import com.polyo.polyo.matchroom.entity.MatchRoom;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
