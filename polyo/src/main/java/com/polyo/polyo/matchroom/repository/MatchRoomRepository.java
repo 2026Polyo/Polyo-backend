@@ -1,5 +1,7 @@
-package com.polyo.polyo.matchroom;
+package com.polyo.polyo.matchroom.repository;
 
+import com.polyo.polyo.matchroom.entity.MatchRoom;
+import com.polyo.polyo.matchroom.entity.MatchRoomStatus;
 import jakarta.persistence.LockModeType;
 import java.util.Optional;
 import org.springframework.data.domain.Page;

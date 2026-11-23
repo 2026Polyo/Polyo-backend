@@ -1,5 +1,7 @@
-package com.polyo.polyo.matchroom;
+package com.polyo.polyo.matchroom.entity;
 
+import com.polyo.polyo.matchroom.dto.MatchRoomUser;
+import com.polyo.polyo.matchroom.service.MatchRoomException;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;

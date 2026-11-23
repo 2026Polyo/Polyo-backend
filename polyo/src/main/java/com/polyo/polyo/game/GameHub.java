@@ -1,9 +1,10 @@
 package com.polyo.polyo.game;
 
-import com.polyo.polyo.matchroom.MatchRoom;
-import com.polyo.polyo.matchroom.MatchRoomEvents;
-import com.polyo.polyo.matchroom.MatchRoomService;
-import com.polyo.polyo.matchroom.MatchRoomUser;
+import com.polyo.polyo.credit.service.ThemeShop;
+import com.polyo.polyo.matchroom.dto.MatchRoomUser;
+import com.polyo.polyo.matchroom.entity.MatchRoom;
+import com.polyo.polyo.matchroom.service.MatchRoomEvents;
+import com.polyo.polyo.matchroom.service.MatchRoomService;
 import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.security.SecureRandom;
@@ -48,13 +49,15 @@ public class GameHub {
 
     private final MatchRoomService rooms;
     private final TrophyService trophies;
+    private final ThemeShop themes;
     private final JsonMapper json;
     private final Map<Long, RoomChannel> channels = new ConcurrentHashMap<>();
     private final ScheduledExecutorService timers = Executors.newSingleThreadScheduledExecutor();
 
-    public GameHub(MatchRoomService rooms, TrophyService trophies, JsonMapper json) {
+    public GameHub(MatchRoomService rooms, TrophyService trophies, ThemeShop themes, JsonMapper json) {
         this.rooms = rooms;
         this.trophies = trophies;
+        this.themes = themes;
         this.json = json;
     }
 
@@ -67,6 +70,8 @@ public class GameHub {
         String hostUserId;
         List<MatchRoom.Member> members = List.of();
         MatchGame game;
+        /** Each player's equipped theme, read when the game starts so a mid-game change does not repaint it. */
+        Map<String, String> themeIds = Map.of();
         /** What the finished game's winner got, shown in its last STATE. */
         TrophyService.Reward trophyReward;
         ScheduledFuture<?> turnTimer;
@@ -230,10 +235,31 @@ public class GameHub {
                 throw new GameException("ROOM_CHANGED", "참가자가 바뀌었습니다. 다시 시도해 주세요.");
             }
             channel.game = new MatchGame(members, new SecureRandom(), System::currentTimeMillis);
+            channel.themeIds = themeIdsOf(memberIds);
             channel.ready.clear();
             scheduleTurnTimer(roomId, channel);
             broadcastCurrent(channel);
         }
+    }
+
+    /**
+     * Each player's equipped theme. A theme is only looks, so one that cannot be read falls back to the
+     * classic theme instead of keeping the game from starting.
+     */
+    private Map<String, String> themeIdsOf(List<String> userIds) {
+        Map<String, String> themeIds = new HashMap<>();
+        for (String userId : userIds) {
+            String themeId = ThemeShop.CLASSIC_THEME;
+            try {
+                themeId = themes.equippedThemeId(Long.parseLong(userId));
+            } catch (NumberFormatException exception) {
+                // Not a stored user, so nothing is equipped.
+            } catch (RuntimeException exception) {
+                log.warn("Failed to read the equipped theme of {}", userId, exception);
+            }
+            themeIds.put(userId, themeId);
+        }
+        return Map.copyOf(themeIds);
     }
 
     /** Relays an emote to everyone in the room, the sender included. */
@@ -357,6 +383,7 @@ public class GameHub {
             broadcastCurrent(channel);
             // Back to the waiting room: the guest readies again and the host starts the next game.
             channel.game = null;
+            channel.themeIds = Map.of();
             channel.trophyReward = null;
             if (!removeIfIdle(roomId, channel)) {
                 broadcastCurrent(channel);
@@ -386,7 +413,7 @@ public class GameHub {
 
     private void broadcastCurrent(RoomChannel channel) {
         Object message = channel.game != null
-                ? GameStateMessage.of(channel.game, channel.sessions.keySet(), channel.trophyReward)
+                ? GameStateMessage.of(channel.game, channel.sessions.keySet(), channel.themeIds, channel.trophyReward)
                 : new ConnectedMessage("WAITING", Set.copyOf(channel.sessions.keySet()), Set.copyOf(channel.ready),
                         channel.hostUserId, channel.members);
         String payload = json.writeValueAsString(message);

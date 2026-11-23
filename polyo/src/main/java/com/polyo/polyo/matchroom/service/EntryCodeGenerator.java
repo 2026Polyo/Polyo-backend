@@ -1,4 +1,4 @@
-package com.polyo.polyo.matchroom;
+package com.polyo.polyo.matchroom.service;
 
 import java.security.SecureRandom;
 import org.springframework.stereotype.Component;
