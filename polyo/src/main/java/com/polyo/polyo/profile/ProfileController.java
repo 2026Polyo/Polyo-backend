@@ -30,7 +30,27 @@ public class ProfileController {
     @PatchMapping
     public ResponseEntity<ApiResponse<ProfileResponse>> update(Authentication authentication,
                                                                @Valid @RequestBody ProfileRequest request) {
+        long authenticatedUserId = authenticatedUserId(authentication);
         return ResponseEntity.ok(ApiResponse.success(
-                profileService.update(Long.parseLong(authentication.getName()), request)));
+                profileService.update(authenticatedUserId, authenticatedUserId, request)));
+    }
+
+    @PatchMapping("/{userId}")
+    public ResponseEntity<ApiResponse<ProfileResponse>> updateByUserId(Authentication authentication,
+                                                                       @PathVariable long userId,
+                                                                       @Valid @RequestBody ProfileRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                profileService.update(authenticatedUserId(authentication), userId, request)));
+    }
+
+    private long authenticatedUserId(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new ProfileException("UNAUTHENTICATED", "로그인이 필요합니다.", 401);
+        }
+        try {
+            return Long.parseLong(authentication.getName());
+        } catch (NumberFormatException exception) {
+            throw new ProfileException("UNAUTHENTICATED", "로그인이 필요합니다.", 401);
+        }
     }
 }

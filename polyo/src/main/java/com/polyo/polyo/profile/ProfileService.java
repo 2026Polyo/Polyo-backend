@@ -28,7 +28,15 @@ public class ProfileService {
 
     @Transactional
     public ProfileResponse update(long userId, ProfileRequest request) {
-        User user = user(userId);
+        return update(userId, userId, request);
+    }
+
+    @Transactional
+    public ProfileResponse update(long authenticatedUserId, long targetUserId, ProfileRequest request) {
+        if (authenticatedUserId != targetUserId) {
+            throw new ProfileException("FORBIDDEN", "본인 프로필만 수정할 수 있습니다.", 403);
+        }
+        User user = user(targetUserId);
         if (userRepository.existsByNickname(request.nickname()) && !user.getNickname().equals(request.nickname())) {
             throw new ProfileException("DUPLICATE_NICKNAME", "이미 사용 중인 닉네임입니다.", 409);
         }
@@ -37,7 +45,7 @@ public class ProfileService {
                     request.avatarBlockColor().strip(), request.avatarBackgroundColor().strip(),
                     request.equippedBaseBlocks(), request.equippedSpecialBlocks() == null
                             ? List.of() : request.equippedSpecialBlocks());
-            UserGameScore scores = scoreRepository.findByUserId(userId).orElse(new UserGameScore(userId));
+            UserGameScore scores = scoreRepository.findByUserId(targetUserId).orElse(new UserGameScore(targetUserId));
             return response(user, scores);
         } catch (DataIntegrityViolationException exception) {
             throw new ProfileException("DUPLICATE_NICKNAME", "이미 사용 중인 닉네임입니다.", 409);
