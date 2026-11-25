@@ -4,7 +4,6 @@ import static com.polyo.polyo.common.error.CommonErrorCode.*;
 
 import com.polyo.polyo.common.error.ApiException;
 import com.polyo.polyo.common.error.ErrorCode;
-import com.polyo.polyo.credit.web.CreditController;
 import jakarta.validation.ConstraintViolationException;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -25,7 +24,7 @@ import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /** CREDIT MVC 오류 처리. 다른 팀 기능과 Security 필터 오류는 기존 처리기를 유지한다. */
-@RestControllerAdvice(basePackageClasses = CreditController.class)
+@RestControllerAdvice(basePackages = {"com.polyo.polyo.credit.web", "com.polyo.polyo.shop.web"})
 @Order(Ordered.LOWEST_PRECEDENCE - 2)
 public class ApiExceptionHandler {
   private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
