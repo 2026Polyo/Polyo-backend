@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.polyo.polyo.TestcontainersConfiguration;
 import com.polyo.polyo.auth.User;
 import com.polyo.polyo.auth.UserRepository;
-import com.polyo.polyo.credit.service.ThemeShop;
+import com.polyo.polyo.shop.service.ThemeEquipmentService;
 import com.polyo.polyo.matchroom.dto.CreateMatchRoomRequest;
 import com.polyo.polyo.matchroom.dto.MatchRoomUser;
 import com.polyo.polyo.matchroom.entity.MatchRoomStatus;
@@ -51,7 +51,7 @@ class GameSocketTests {
     @Autowired UserRepository users;
     @Autowired JsonMapper json;
     @Autowired JdbcClient jdbc;
-    @Autowired ThemeShop themes;
+    @Autowired ThemeEquipmentService themes;
     @Value("${app.auth.jwt-secret}") String secret;
 
     private final class Client extends TextWebSocketHandler {
@@ -185,7 +185,7 @@ class GameSocketTests {
         assertThat(state.path("players").size()).isEqualTo(2);
         // Users who are not stored have nothing equipped.
         state.path("players").forEach(player ->
-                assertThat(player.path("themeId").asString()).isEqualTo(ThemeShop.CLASSIC_THEME));
+                assertThat(player.path("themeId").asString()).isEqualTo(ThemeEquipmentService.CLASSIC_THEME));
         assertThat(state.path("turnRemainingMs").asLong()).isBetween(1L, 10_000L);
         assertThat(repository.findById(roomId).orElseThrow().status()).isEqualTo(MatchRoomStatus.PLAYING);
 
@@ -312,10 +312,10 @@ class GameSocketTests {
 
         JsonNode state = startGame(host, guest);
         assertThat(themeIdsByUser(state)).containsExactlyInAnyOrderEntriesOf(
-                Map.of(hostUser.id(), "theme_neon", guestUser.id(), ThemeShop.CLASSIC_THEME));
+                Map.of(hostUser.id(), "theme_neon", guestUser.id(), ThemeEquipmentService.CLASSIC_THEME));
 
         // Both screens get both themes, and a change made mid-game waits for the next game.
-        themes.equip(Long.parseLong(hostUser.id()), ThemeShop.CLASSIC_THEME);
+        themes.equip(Long.parseLong(hostUser.id()), ThemeEquipmentService.CLASSIC_THEME);
         host.session.close();
         Client hostAgain = new Client(hostUser, roomId);
         hostAgain.authenticate();
@@ -325,7 +325,7 @@ class GameSocketTests {
         guest.until("WAITING");
 
         JsonNode rematch = startGame(hostAgain, guest);
-        assertThat(themeIdsByUser(rematch)).containsEntry(hostUser.id(), ThemeShop.CLASSIC_THEME);
+        assertThat(themeIdsByUser(rematch)).containsEntry(hostUser.id(), ThemeEquipmentService.CLASSIC_THEME);
     }
 
     private static Map<String, String> themeIdsByUser(JsonNode state) {
