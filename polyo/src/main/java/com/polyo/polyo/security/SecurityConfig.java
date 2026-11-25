@@ -2,6 +2,7 @@
 package com.polyo.polyo.security;
 
 import com.polyo.polyo.auth.JwtTokenProvider;
+import com.polyo.polyo.auth.UserRepository;
 import com.polyo.polyo.common.ApiResponse;
 import com.polyo.polyo.common.api.ApiFailure;
 import com.polyo.polyo.common.error.CommonErrorCode;
@@ -27,7 +28,8 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             JsonMapper jsonMapper,
-            JwtTokenProvider tokenProvider
+            JwtTokenProvider tokenProvider,
+            UserRepository userRepository
     ) throws Exception {
         return http.csrf(AbstractHttpConfigurer::disable)
         .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -43,7 +45,7 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
         )
         .addFilterBefore(
-                new JwtAuthenticationFilter(tokenProvider),
+                new JwtAuthenticationFilter(tokenProvider, userRepository),
                 UsernamePasswordAuthenticationFilter.class
         )
         .exceptionHandling(exceptions ->

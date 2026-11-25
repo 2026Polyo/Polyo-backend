@@ -1,12 +1,9 @@
 package com.polyo.polyo.ranking;
 
-import com.polyo.polyo.auth.User;
 import com.polyo.polyo.auth.UserRepository;
-import com.polyo.polyo.score.GameMode;
 import com.polyo.polyo.score.UserGameScore;
 import com.polyo.polyo.score.UserGameScoreRepository;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,19 +33,16 @@ public class RankingService {
     @Transactional(readOnly = true)
     public RankingResponse getRanking(RankingType rankingType) {
         List<RankingEntry> entries = switch (rankingType) {
-            case TROPHY -> userRepository.findAll().stream()
-                    .sorted(Comparator.comparingInt(User::getTrophy).reversed()
-                            .thenComparing(User::getId))
+            case TROPHY -> userRepository.findAllByOrderByTrophyDescIdAsc().stream()
                     .map(user -> new RankingEntry(0, String.valueOf(user.getId()), user.getNickname(), user.getTrophy()))
                     .toList();
-            case NORMAL, HARD -> scoreRepository.findAll().stream()
-                    .sorted(Comparator.comparingInt((UserGameScore score) -> score.bestScore(
-                                    rankingType == RankingType.HARD ? GameMode.HARD : GameMode.NORMAL))
-                            .reversed()
-                            .thenComparing(UserGameScore::getUserId))
+            case NORMAL -> scoreRepository.findAllRankedByNormalScore().stream()
                     .map(score -> new RankingEntry(0, String.valueOf(score.getUserId()),
-                            score.getUser().getNickname(), score.bestScore(
-                                    rankingType == RankingType.HARD ? GameMode.HARD : GameMode.NORMAL)))
+                            score.getUser().getNickname(), score.getNormalBestScore()))
+                    .toList();
+            case HARD -> scoreRepository.findAllRankedByHardScore().stream()
+                    .map(score -> new RankingEntry(0, String.valueOf(score.getUserId()),
+                            score.getUser().getNickname(), score.getHardBestScore()))
                     .toList();
         };
 

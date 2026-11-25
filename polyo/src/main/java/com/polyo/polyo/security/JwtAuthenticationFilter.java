@@ -1,6 +1,7 @@
 package com.polyo.polyo.security;
 
 import com.polyo.polyo.auth.JwtTokenProvider;
+import com.polyo.polyo.auth.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,9 +21,11 @@ class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtTokenProvider tokenProvider;
+    private final UserRepository userRepository;
 
-    JwtAuthenticationFilter(JwtTokenProvider tokenProvider) {
+    JwtAuthenticationFilter(JwtTokenProvider tokenProvider, UserRepository userRepository) {
         this.tokenProvider = tokenProvider;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -30,7 +33,9 @@ class JwtAuthenticationFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (header != null && header.startsWith(BEARER_PREFIX)) {
-            tokenProvider.parse(header.substring(BEARER_PREFIX.length())).ifPresent(user -> {
+            tokenProvider.parse(header.substring(BEARER_PREFIX.length()))
+                    .filter(user -> userRepository.existsById(Long.valueOf(user.id())))
+                    .ifPresent(user -> {
                 var authentication = new UsernamePasswordAuthenticationToken(
                         user,
                         null,
@@ -44,7 +49,7 @@ class JwtAuthenticationFilter extends OncePerRequestFilter {
                 SecurityContext context = SecurityContextHolder.createEmptyContext();
                 context.setAuthentication(authentication);
                 SecurityContextHolder.setContext(context);
-            });
+                    });
         }
         chain.doFilter(request, response);
     }
