@@ -1,6 +1,6 @@
 package com.polyo.polyo.credit.web;
 
-import com.polyo.polyo.common.api.ApiSuccess;
+import com.polyo.polyo.common.api.ApiResponse;
 import com.polyo.polyo.credit.port.AuthenticatedUserProvider;
 import com.polyo.polyo.game.HardModeGames;
 import io.swagger.v3.oas.annotations.Operation;
@@ -34,27 +34,27 @@ public class HardModeGameController {
 
     @PostMapping
     @Operation(summary = "보상 대상 하드모드 시작")
-    public ApiSuccess<HardModeGames.Snapshot> start() {
-        return ApiSuccess.of(games.start(userId()));
+    public ApiResponse<HardModeGames.Snapshot> start() {
+        return ApiResponse.success(games.start(userId()));
     }
 
     @PostMapping("/{gameId}/moves")
     @Operation(summary = "하드모드 블록 배치", description = "점수와 남은 시간은 서버가 계산한다.")
-    public ApiSuccess<HardModeGames.Snapshot> place(@PathVariable String gameId, @Valid @RequestBody Placement body) {
-        return ApiSuccess.of(games.place(userId(), gameId,
+    public ApiResponse<HardModeGames.Snapshot> place(@PathVariable String gameId, @Valid @RequestBody Placement body) {
+        return ApiResponse.success(games.place(userId(), gameId,
                 new HardModeGames.Move(body.moveNumber(), body.slot(), body.row(), body.col())));
     }
 
     @PutMapping("/{gameId}/timer")
     @Operation(summary = "하드모드 타이머 일시 정지 또는 재개")
-    public ApiSuccess<HardModeGames.Snapshot> pause(@PathVariable String gameId, @Valid @RequestBody Pause body) {
-        return ApiSuccess.of(games.setPaused(userId(), gameId, body.paused()));
+    public ApiResponse<HardModeGames.Snapshot> pause(@PathVariable String gameId, @Valid @RequestBody Pause body) {
+        return ApiResponse.success(games.setPaused(userId(), gameId, body.paused()));
     }
 
     @PutMapping("/{gameId}/completion")
     @Operation(summary = "하드모드 종료 확인", description = "둘 수 있는 블록이 없거나 제한 시간이 지난 게임만 종료한다.")
-    public ApiSuccess<HardModeGames.Snapshot> finish(@PathVariable String gameId) {
-        return ApiSuccess.of(games.finish(userId(), gameId));
+    public ApiResponse<HardModeGames.Snapshot> finish(@PathVariable String gameId) {
+        return ApiResponse.success(games.finish(userId(), gameId));
     }
 
     private long userId() {

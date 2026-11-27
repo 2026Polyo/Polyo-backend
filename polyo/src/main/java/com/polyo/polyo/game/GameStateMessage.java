@@ -1,6 +1,6 @@
 package com.polyo.polyo.game;
 
-import com.polyo.polyo.credit.service.ThemeShop;
+import com.polyo.polyo.shop.service.ThemeEquipmentService;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +28,7 @@ record GameStateMessage(String type, String status, String turnUserId, long turn
                 .map(player -> new PlayerState(player.userId, player.nickname, player.board.cells(),
                         player.board.score(), player.board.combo(), player.turnLimitMs,
                         connected.contains(player.userId),
-                        themeIds.getOrDefault(player.userId, ThemeShop.CLASSIC_THEME)))
+                        themeIds.getOrDefault(player.userId, ThemeEquipmentService.CLASSIC_THEME)))
                 .toList();
         boolean finished = game.finished();
         return new GameStateMessage("STATE", finished ? "FINISHED" : "PLAYING", game.current().userId,

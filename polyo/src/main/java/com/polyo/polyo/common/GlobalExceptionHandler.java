@@ -1,5 +1,6 @@
 package com.polyo.polyo.common;
 
+import com.polyo.polyo.common.api.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,13 +24,13 @@ public class GlobalExceptionHandler {
             ConstraintViolationException.class, HttpMessageNotReadableException.class,
             MethodArgumentTypeMismatchException.class})
     public ResponseEntity<ApiResponse<Void>> handleInvalidRequest(Exception exception) {
-        return ResponseEntity.badRequest().body(ApiResponse.failure("INVALID_REQUEST", "요청 값이 올바르지 않습니다."));
+        return ResponseEntity.badRequest().body(ApiResponse.failure("INVALID_REQUEST", "요청 값이 올바르지 않습니다.", 400));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnexpected(Exception exception) {
         log.error("Unexpected request failure", exception);
         return ResponseEntity.internalServerError()
-                .body(ApiResponse.failure("INTERNAL_SERVER_ERROR", "일시적인 서버 오류가 발생했습니다."));
+                .body(ApiResponse.failure("INTERNAL_SERVER_ERROR", "일시적인 서버 오류가 발생했습니다.", 500));
     }
 }

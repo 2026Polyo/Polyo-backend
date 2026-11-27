@@ -1,6 +1,6 @@
 package com.polyo.polyo.ranking;
 
-import com.polyo.polyo.common.ApiResponse;
+import com.polyo.polyo.common.api.ApiResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

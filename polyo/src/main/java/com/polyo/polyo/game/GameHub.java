@@ -1,6 +1,7 @@
 package com.polyo.polyo.game;
 
-import com.polyo.polyo.credit.service.ThemeShop;
+import com.polyo.polyo.shop.service.ThemeAccountService;
+import com.polyo.polyo.shop.service.ThemeEquipmentService;
 import com.polyo.polyo.matchroom.dto.MatchRoomUser;
 import com.polyo.polyo.matchroom.entity.MatchRoom;
 import com.polyo.polyo.matchroom.service.MatchRoomEvents;
@@ -49,12 +50,12 @@ public class GameHub {
 
     private final MatchRoomService rooms;
     private final TrophyService trophies;
-    private final ThemeShop themes;
+    private final ThemeAccountService themes;
     private final JsonMapper json;
     private final Map<Long, RoomChannel> channels = new ConcurrentHashMap<>();
     private final ScheduledExecutorService timers = Executors.newSingleThreadScheduledExecutor();
 
-    public GameHub(MatchRoomService rooms, TrophyService trophies, ThemeShop themes, JsonMapper json) {
+    public GameHub(MatchRoomService rooms, TrophyService trophies, ThemeAccountService themes, JsonMapper json) {
         this.rooms = rooms;
         this.trophies = trophies;
         this.themes = themes;
@@ -249,7 +250,7 @@ public class GameHub {
     private Map<String, String> themeIdsOf(List<String> userIds) {
         Map<String, String> themeIds = new HashMap<>();
         for (String userId : userIds) {
-            String themeId = ThemeShop.CLASSIC_THEME;
+            String themeId = ThemeEquipmentService.CLASSIC_THEME;
             try {
                 themeId = themes.equippedThemeId(Long.parseLong(userId));
             } catch (NumberFormatException exception) {

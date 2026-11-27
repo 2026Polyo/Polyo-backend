@@ -8,7 +8,7 @@ import com.polyo.polyo.TestcontainersConfiguration;
 import com.polyo.polyo.auth.JwtTokenProvider;
 import com.polyo.polyo.auth.User;
 import com.polyo.polyo.auth.UserRepository;
-import com.polyo.polyo.credit.service.ThemeShop;
+import com.polyo.polyo.shop.service.ThemePurchaseService;
 import com.polyo.polyo.game.HardModeGames;
 import java.util.Arrays;
 import java.util.List;
@@ -39,7 +39,7 @@ class CreditShopIntegrationTest {
     @Autowired JdbcClient jdbc;
     @Autowired UserRepository users;
     @Autowired JwtTokenProvider tokens;
-    @Autowired ThemeShop shop;
+    @Autowired ThemePurchaseService shop;
 
     @Test
     void onlyFinishedServerGamePaysAndRepeatingARequestDoesNotPayAgain() throws Exception {
