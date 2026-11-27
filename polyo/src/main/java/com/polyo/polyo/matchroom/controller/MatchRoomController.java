@@ -1,6 +1,6 @@
 package com.polyo.polyo.matchroom.controller;
 
-import com.polyo.polyo.common.ApiResponse;
+import com.polyo.polyo.common.api.ApiResponse;
 import com.polyo.polyo.matchroom.dto.*;
 import com.polyo.polyo.matchroom.service.MatchRoomException;
 import com.polyo.polyo.matchroom.service.MatchRoomService;

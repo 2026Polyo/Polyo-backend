@@ -1,6 +1,6 @@
 package com.polyo.polyo.shop.web;
 
-import com.polyo.polyo.common.api.ApiSuccess;
+import com.polyo.polyo.common.api.ApiResponse;
 import com.polyo.polyo.credit.port.AuthenticatedUserProvider;
 import com.polyo.polyo.shop.dto.ThemeAccount;
 import com.polyo.polyo.shop.dto.ThemeCatalog;
@@ -40,29 +40,29 @@ public class ThemeShopController {
 
     @GetMapping("/themes")
     @Operation(summary = "판매 테마 조회")
-    public ApiSuccess<ThemeCatalog> catalog(
+    public ApiResponse<ThemeCatalog> catalog(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "name,asc") String sort) {
-        return ApiSuccess.of(catalog.catalog(page, size, sort));
+        return ApiResponse.success(catalog.catalog(page, size, sort));
     }
 
     @GetMapping("/accounts/me")
     @Operation(summary = "상점의 현재 잔액, 보유 테마 및 장착 테마 조회")
-    public ApiSuccess<ThemeAccount> account() {
-        return ApiSuccess.of(accounts.get(userId()));
+    public ApiResponse<ThemeAccount> account() {
+        return ApiResponse.success(accounts.get(userId()));
     }
 
     @PostMapping("/purchases")
     @Operation(summary = "테마 구매", description = "테마 ID만 받는다. 동일 테마는 한 번만 결제한다.")
-    public ApiSuccess<ThemeAccount> purchase(@Valid @RequestBody ThemeRequest request) {
-        return ApiSuccess.of(purchases.purchase(userId(), request.themeId()));
+    public ApiResponse<ThemeAccount> purchase(@Valid @RequestBody ThemeRequest request) {
+        return ApiResponse.success(purchases.purchase(userId(), request.themeId()));
     }
 
     @PutMapping("/equipment/me")
     @Operation(summary = "보유 테마 장착")
-    public ApiSuccess<ThemeAccount> equip(@Valid @RequestBody ThemeRequest request) {
-        return ApiSuccess.of(equipment.equip(userId(), request.themeId()));
+    public ApiResponse<ThemeAccount> equip(@Valid @RequestBody ThemeRequest request) {
+        return ApiResponse.success(equipment.equip(userId(), request.themeId()));
     }
 
     private long userId() {

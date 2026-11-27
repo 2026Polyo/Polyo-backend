@@ -1,6 +1,6 @@
 package com.polyo.polyo.matchroom.controller;
 
-import com.polyo.polyo.common.ApiResponse;
+import com.polyo.polyo.common.api.ApiResponse;
 import com.polyo.polyo.matchroom.service.MatchRoomException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -14,6 +14,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class MatchRoomExceptionHandler {
     @ExceptionHandler(MatchRoomException.class)
     public ResponseEntity<ApiResponse<Void>> handleRoom(MatchRoomException exception) {
-        return ResponseEntity.status(exception.status()).body(ApiResponse.failure(exception.code(), exception.getMessage()));
+        return ResponseEntity.status(exception.status()).body(ApiResponse.failure(exception.code(), exception.getMessage(), exception.status()));
     }
 }
