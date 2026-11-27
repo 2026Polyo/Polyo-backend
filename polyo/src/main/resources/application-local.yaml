@@ -1,0 +1,12 @@
+spring:
+  config:
+    activate:
+      on-profile: local
+  datasource:
+    url: jdbc:postgresql://localhost:5432/polyo
+    username: polyo
+    password: polyo_local
+
+app:
+  auth:
+    jwt-secret: polyo-local-only-secret-change-me
