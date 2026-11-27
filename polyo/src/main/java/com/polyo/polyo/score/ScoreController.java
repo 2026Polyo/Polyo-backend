@@ -1,6 +1,6 @@
 package com.polyo.polyo.score;
 
-import com.polyo.polyo.auth.ApiResponse;
+import com.polyo.polyo.common.api.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;

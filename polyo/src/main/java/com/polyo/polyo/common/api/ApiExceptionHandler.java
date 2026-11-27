@@ -30,7 +30,7 @@ public class ApiExceptionHandler {
   private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
   @ExceptionHandler(ApiException.class)
-  public ResponseEntity<ApiFailure> applicationError(ApiException exception) {
+  public ResponseEntity<ApiResponse<Void>> applicationError(ApiException exception) {
     return failure(exception.errorCode());
   }
 
@@ -40,17 +40,17 @@ public class ApiExceptionHandler {
     ConstraintViolationException.class,
     HttpMediaTypeNotSupportedException.class
   })
-  public ResponseEntity<ApiFailure> invalidBody(Exception exception) {
+  public ResponseEntity<ApiResponse<Void>> invalidBody(Exception exception) {
     return failure(INVALID_REQUEST_BODY);
   }
 
   @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-  public ResponseEntity<ApiFailure> invalidParameter(Exception exception) {
+  public ResponseEntity<ApiResponse<Void>> invalidParameter(Exception exception) {
     return failure(INVALID_REQUEST_PARAM);
   }
 
   @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
-  public ResponseEntity<ApiFailure> unsupportedMethod(
+  public ResponseEntity<ApiResponse<Void>> unsupportedMethod(
       HttpRequestMethodNotSupportedException exception) {
     var response = ResponseEntity.status(METHOD_NOT_ALLOWED.status());
     var supportedMethods = exception.getSupportedHttpMethods();
@@ -59,22 +59,22 @@ public class ApiExceptionHandler {
           supportedMethods.stream().map(HttpMethod::name).collect(Collectors.joining(", "));
       response.header(HttpHeaders.ALLOW, allowed);
     }
-    return response.body(ApiFailure.of(METHOD_NOT_ALLOWED));
+      return response.body(ApiResponse.failure(METHOD_NOT_ALLOWED));
   }
 
   @ExceptionHandler({NoHandlerFoundException.class, NoResourceFoundException.class})
-  public ResponseEntity<ApiFailure> notFound(Exception exception) {
+  public ResponseEntity<ApiResponse<Void>> notFound(Exception exception) {
     return failure(API_NOT_FOUND);
   }
 
   @ExceptionHandler(Exception.class)
-  public ResponseEntity<ApiFailure> unexpected(Exception exception) {
+  public ResponseEntity<ApiResponse<Void>> unexpected(Exception exception) {
     // 원문 메시지에는 인증 정보나 외부 서비스 응답이 포함될 수 있다.
     log.error("Unhandled API exception type={}", exception.getClass().getName());
     return failure(INTERNAL_SERVER_ERROR);
   }
 
-  private ResponseEntity<ApiFailure> failure(ErrorCode errorCode) {
-    return ResponseEntity.status(errorCode.status()).body(ApiFailure.of(errorCode));
+  private ResponseEntity<ApiResponse<Void>> failure(ErrorCode errorCode) {
+    return ResponseEntity.status(errorCode.status()).body(ApiResponse.failure(errorCode));
   }
 }

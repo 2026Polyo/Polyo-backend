@@ -1,6 +1,6 @@
 package com.polyo.polyo.ranking;
 
-import com.polyo.polyo.common.ApiResponse;
+import com.polyo.polyo.common.api.ApiResponse;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +13,6 @@ public class RankingExceptionHandler {
     @ExceptionHandler(RankingException.class)
     public ResponseEntity<ApiResponse<Void>> handle(RankingException exception) {
         return ResponseEntity.status(exception.getStatus())
-                .body(ApiResponse.failure(exception.getCode(), exception.getMessage()));
+                .body(ApiResponse.failure(exception.getCode(), exception.getMessage(), exception.getStatus()));
     }
 }

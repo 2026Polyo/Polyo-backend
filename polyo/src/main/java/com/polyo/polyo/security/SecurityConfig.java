@@ -3,8 +3,7 @@ package com.polyo.polyo.security;
 
 import com.polyo.polyo.auth.JwtTokenProvider;
 import com.polyo.polyo.auth.UserRepository;
-import com.polyo.polyo.common.ApiResponse;
-import com.polyo.polyo.common.api.ApiFailure;
+import com.polyo.polyo.common.api.ApiResponse;
 import com.polyo.polyo.common.error.CommonErrorCode;
 import tools.jackson.databind.json.JsonMapper;
 import org.springframework.context.annotation.Bean;
@@ -66,10 +65,10 @@ public class SecurityConfig {
             response.setCharacterEncoding("UTF-8");
             String path = request.getRequestURI().substring(request.getContextPath().length());
             if (path.startsWith("/api/credit/v11/") || path.startsWith("/api/shop/v11/")) {
-                jsonMapper.writeValue(response.getOutputStream(), ApiFailure.of(CommonErrorCode.AUTH_UNAUTHORIZED));
+                jsonMapper.writeValue(response.getOutputStream(), ApiResponse.failure(CommonErrorCode.AUTH_UNAUTHORIZED));
             } else {
                 jsonMapper.writeValue(response.getOutputStream(),
-                        ApiResponse.failure("UNAUTHENTICATED", "로그인이 필요합니다."));
+                        ApiResponse.failure("UNAUTHENTICATED", "로그인이 필요합니다.", HttpStatus.UNAUTHORIZED.value()));
             }
         };
     }
