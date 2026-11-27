@@ -181,7 +181,7 @@ class GameSocketTests {
         JsonNode state = startGame(host, guest);
 
         assertThat(state.path("status").asString()).isEqualTo("PLAYING");
-        assertThat(state.path("tray").size()).isEqualTo(6);
+        assertThat(state.path("tray").size()).isEqualTo(5);
         assertThat(state.path("players").size()).isEqualTo(2);
         // Users who are not stored have nothing equipped.
         state.path("players").forEach(player ->

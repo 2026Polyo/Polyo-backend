@@ -37,6 +37,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/auth/signup", "/api/v1/auth/login").permitAll()
                 // 게임 매치용 웹소켓 핸드셰이크는 허용
                 .requestMatchers("/ws/match/*").permitAll()
+                // API 문서 (Swagger UI / OpenAPI JSON)
+                .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**").permitAll()
                 // 테마 목록 조회는 비로그인 허용
                 .requestMatchers(HttpMethod.GET, "/api/shop/v11/themes").permitAll()
                 // 나머지는 모두 인증 필요 (예: /api/v1/auth/me 등)
