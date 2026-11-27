@@ -1,5 +1,7 @@
-package com.polyo.polyo.matchroom;
+package com.polyo.polyo.matchroom.entity;
 
+import com.polyo.polyo.matchroom.dto.MatchRoomUser;
+import com.polyo.polyo.matchroom.service.MatchRoomException;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
@@ -101,8 +103,15 @@ public class MatchRoom {
         return true;
     }
 
+    /** Ends the game but keeps the room. Members cannot change during a game, so both are still in. */
+    public void finish() {
+        if (status == MatchRoomStatus.PLAYING) {
+            status = MatchRoomStatus.FULL;
+        }
+    }
+
     /**
-     * Removes {@code user} before the game starts. Returns true when the host left, which closes the room:
+     * Removes {@code user} while no game is running. Returns true when the host left, which closes the room:
      * the caller deletes it.
      */
     public boolean leave(MatchRoomUser user) {

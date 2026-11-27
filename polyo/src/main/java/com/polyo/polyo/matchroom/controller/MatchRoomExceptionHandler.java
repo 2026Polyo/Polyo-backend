@@ -1,6 +1,7 @@
-package com.polyo.polyo.matchroom;
+package com.polyo.polyo.matchroom.controller;
 
 import com.polyo.polyo.common.ApiResponse;
+import com.polyo.polyo.matchroom.service.MatchRoomException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.ResponseEntity;

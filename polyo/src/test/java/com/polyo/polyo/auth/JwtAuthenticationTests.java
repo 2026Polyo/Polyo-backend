@@ -2,6 +2,7 @@ package com.polyo.polyo.auth;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -10,6 +11,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -112,6 +114,31 @@ class JwtAuthenticationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.normalBestScore").value(0))
                 .andExpect(jsonPath("$.data.hardBestScore").value(0));
+    }
+
+    @Test
+    void profileUpdateRejectsARequestForAnotherUser() throws Exception {
+        JsonNode owner = signupAndLogin();
+        JsonNode other = signupAndLogin();
+        Map<String, Object> profile = Map.of(
+                "nickname", "바꾸려는닉네임",
+                "avatarBlockId", "tetromino-t-down",
+                "avatarBlockColor", "cyan",
+                "avatarBackgroundColor", "#d9f4ff",
+                "equippedBaseBlocks", List.of("tetromino-t-down"),
+                "equippedSpecialBlocks", List.of());
+
+        mvc.perform(patch("/api/v1/profile/" + other.path("user").path("id").asText())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + owner.path("accessToken").asText())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(profile)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("FORBIDDEN"));
+
+        mvc.perform(get("/api/v1/profile/" + other.path("user").path("id").asText())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + owner.path("accessToken").asText()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.nickname").value(other.path("user").path("nickname").asText()));
     }
 
     @ParameterizedTest

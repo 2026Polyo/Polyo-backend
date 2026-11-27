@@ -3,7 +3,7 @@ package com.polyo.polyo.game;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.polyo.polyo.matchroom.MatchRoom;
+import com.polyo.polyo.matchroom.entity.MatchRoom;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -20,7 +20,7 @@ class MatchGameTests {
     void start() {
         game = new MatchGame(List.of(new MatchRoom.Member("a", "에이"), new MatchRoom.Member("b", "비")),
                 new Random(1), now::get);
-        game.setTray(singles(6));
+        game.setTray(singles(PieceCatalog.TRAY_SIZE));
     }
 
     private static List<Piece> singles(int count) {
@@ -48,8 +48,8 @@ class MatchGameTests {
     }
 
     @Test
-    void trayHasSixSlotsAndPlayersAlternateOnSeparateBoards() {
-        assertThat(PieceCatalog.nextTray(new Random(2))).hasSize(6);
+    void trayHasFiveSlotsAndPlayersAlternateOnSeparateBoards() {
+        assertThat(PieceCatalog.nextTray(new Random(2))).hasSize(5);
         String first = turn();
         String second = other();
 
@@ -58,7 +58,7 @@ class MatchGameTests {
         assertThat(turn()).isEqualTo(second);
         assertThat(playerOf(first).board.cells()[0][0]).isEqualTo("cyan");
         assertThat(playerOf(second).board.cells()[0][0]).isNull();
-        assertThat(game.remainingPieces()).hasSize(5);
+        assertThat(game.remainingPieces()).hasSize(PieceCatalog.TRAY_SIZE - 1);
     }
 
     @Test
@@ -79,15 +79,15 @@ class MatchGameTests {
         assertThatThrownBy(() -> placeNext(8, 0))
                 .isInstanceOfSatisfying(GameException.class, e -> assertThat(e.code()).isEqualTo("INVALID_PLACEMENT"));
         assertThat(turn()).isEqualTo(player);
-        assertThat(game.remainingPieces()).hasSize(6);
+        assertThat(game.remainingPieces()).hasSize(PieceCatalog.TRAY_SIZE);
     }
 
     @Test
-    void usingAllSixDealsANewTray() {
-        for (int i = 0; i < 6; i++) {
+    void usingTheWholeTrayDealsANewOne() {
+        for (int i = 0; i < PieceCatalog.TRAY_SIZE; i++) {
             placeNext(0, i / 2 + (i % 2));
         }
-        assertThat(game.remainingPieces()).hasSize(6);
+        assertThat(game.remainingPieces()).hasSize(PieceCatalog.TRAY_SIZE);
         assertThat(game.tray()).doesNotContainNull();
     }
 

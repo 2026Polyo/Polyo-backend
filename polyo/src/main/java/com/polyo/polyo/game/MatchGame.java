@@ -1,6 +1,6 @@
 package com.polyo.polyo.game;
 
-import com.polyo.polyo.matchroom.MatchRoom;
+import com.polyo.polyo.matchroom.entity.MatchRoom;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;

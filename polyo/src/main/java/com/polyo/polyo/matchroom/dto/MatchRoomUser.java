@@ -1,4 +1,4 @@
-package com.polyo.polyo.matchroom;
+package com.polyo.polyo.matchroom.dto;
 
 import java.security.Principal;
 

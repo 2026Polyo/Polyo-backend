@@ -1,5 +1,13 @@
-package com.polyo.polyo.matchroom;
+package com.polyo.polyo.matchroom.service;
 
+import com.polyo.polyo.matchroom.dto.CreateMatchRoomRequest;
+import com.polyo.polyo.matchroom.dto.JoinByCodeRequest;
+import com.polyo.polyo.matchroom.dto.MatchRoomListResponse;
+import com.polyo.polyo.matchroom.dto.MatchRoomResponse;
+import com.polyo.polyo.matchroom.dto.MatchRoomUser;
+import com.polyo.polyo.matchroom.entity.MatchRoom;
+import com.polyo.polyo.matchroom.entity.MatchRoomStatus;
+import com.polyo.polyo.matchroom.repository.MatchRoomRepository;
 import java.util.List;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
@@ -96,10 +104,10 @@ public class MatchRoomService {
         return repository.findByIdForUpdate(roomId).orElseThrow(MatchRoomException::notFound).start(expected);
     }
 
-    /** A finished room is removed: matches are one game long and results are not stored yet. */
+    /** A finished game keeps its room: both members stay, to play again or to leave. Only trophies are stored (see GameHub). */
     @Transactional
     public void finish(long roomId) {
-        repository.findByIdForUpdate(roomId).ifPresent(repository::delete);
+        repository.findByIdForUpdate(roomId).ifPresent(MatchRoom::finish);
     }
 
     private String allocateEntryCode() {

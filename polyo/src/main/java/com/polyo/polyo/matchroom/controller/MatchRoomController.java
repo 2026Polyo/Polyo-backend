@@ -1,6 +1,9 @@
-package com.polyo.polyo.matchroom;
+package com.polyo.polyo.matchroom.controller;
 
 import com.polyo.polyo.common.ApiResponse;
+import com.polyo.polyo.matchroom.dto.*;
+import com.polyo.polyo.matchroom.service.MatchRoomException;
+import com.polyo.polyo.matchroom.service.MatchRoomService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -37,7 +40,7 @@ public class MatchRoomController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<MatchRoomResponse>> create(@Valid @RequestBody CreateMatchRoomRequest request,
-            @AuthenticationPrincipal MatchRoomUser user) {
+                                                                 @AuthenticationPrincipal MatchRoomUser user) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(service.create(request, requireUser(user))));
     }
 

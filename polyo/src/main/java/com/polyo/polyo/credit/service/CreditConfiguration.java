@@ -5,7 +5,7 @@ import com.polyo.polyo.common.error.CommonErrorCode;
 import com.polyo.polyo.credit.port.AuthenticatedUserProvider;
 import com.polyo.polyo.credit.port.CreditSettlementStore;
 import com.polyo.polyo.credit.port.GameResultSource;
-import com.polyo.polyo.matchroom.MatchRoomUser;
+import com.polyo.polyo.matchroom.dto.MatchRoomUser;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.core.context.SecurityContextHolder;

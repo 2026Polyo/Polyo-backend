@@ -1,4 +1,4 @@
-package com.polyo.polyo.matchroom;
+package com.polyo.polyo.matchroom.service;
 
 public class MatchRoomException extends RuntimeException {
     private final String code;

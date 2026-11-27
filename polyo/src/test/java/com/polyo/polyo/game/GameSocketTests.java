@@ -3,11 +3,14 @@ package com.polyo.polyo.game;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.polyo.polyo.TestcontainersConfiguration;
-import com.polyo.polyo.matchroom.CreateMatchRoomRequest;
-import com.polyo.polyo.matchroom.MatchRoomRepository;
-import com.polyo.polyo.matchroom.MatchRoomService;
-import com.polyo.polyo.matchroom.MatchRoomStatus;
-import com.polyo.polyo.matchroom.MatchRoomUser;
+import com.polyo.polyo.auth.User;
+import com.polyo.polyo.auth.UserRepository;
+import com.polyo.polyo.shop.service.ThemeEquipmentService;
+import com.polyo.polyo.matchroom.dto.CreateMatchRoomRequest;
+import com.polyo.polyo.matchroom.dto.MatchRoomUser;
+import com.polyo.polyo.matchroom.entity.MatchRoomStatus;
+import com.polyo.polyo.matchroom.repository.MatchRoomRepository;
+import com.polyo.polyo.matchroom.service.MatchRoomService;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
@@ -27,6 +30,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
@@ -44,7 +48,10 @@ class GameSocketTests {
     @LocalServerPort int port;
     @Autowired MatchRoomService rooms;
     @Autowired MatchRoomRepository repository;
+    @Autowired UserRepository users;
     @Autowired JsonMapper json;
+    @Autowired JdbcClient jdbc;
+    @Autowired ThemeEquipmentService themes;
     @Value("${app.auth.jwt-secret}") String secret;
 
     private final class Client extends TextWebSocketHandler {
@@ -102,6 +109,17 @@ class GameSocketTests {
     private MatchRoomUser newUser() {
         int id = SEQUENCE.incrementAndGet();
         return new MatchRoomUser(String.valueOf(id), "user" + id);
+    }
+
+    /** A user stored in the users table, for tests that read or change what is saved about them. */
+    private MatchRoomUser storedUser() {
+        int sequence = SEQUENCE.incrementAndGet();
+        User user = users.save(User.create("trophy" + sequence, "password", "trophy" + sequence));
+        return new MatchRoomUser(String.valueOf(user.getId()), user.getNickname());
+    }
+
+    private int trophiesOf(MatchRoomUser user) {
+        return users.findById(Long.valueOf(user.id())).orElseThrow().getTrophy();
     }
 
     private String token(MatchRoomUser user) {
@@ -165,6 +183,9 @@ class GameSocketTests {
         assertThat(state.path("status").asString()).isEqualTo("PLAYING");
         assertThat(state.path("tray").size()).isEqualTo(6);
         assertThat(state.path("players").size()).isEqualTo(2);
+        // Users who are not stored have nothing equipped.
+        state.path("players").forEach(player ->
+                assertThat(player.path("themeId").asString()).isEqualTo(ThemeEquipmentService.CLASSIC_THEME));
         assertThat(state.path("turnRemainingMs").asLong()).isBetween(1L, 10_000L);
         assertThat(repository.findById(roomId).orElseThrow().status()).isEqualTo(MatchRoomStatus.PLAYING);
 
@@ -189,6 +210,161 @@ class GameSocketTests {
         assertThat(finished.path("status").asString()).isEqualTo("FINISHED");
         assertThat(finished.path("winnerUserId").asString()).isEqualTo(waiter.user.id());
         assertThat(finished.path("finishReason").asString()).isEqualTo("FORFEIT");
+        assertThat(repository.findById(roomId).orElseThrow().status()).isEqualTo(MatchRoomStatus.FULL);
+    }
+
+    @Test
+    void finishedGameKeepsTheRoomForTheNextGame() throws Exception {
+        MatchRoomUser hostUser = newUser();
+        MatchRoomUser guestUser = newUser();
+        long roomId = fullRoom(hostUser, guestUser);
+        Client host = new Client(hostUser, roomId);
+        Client guest = new Client(guestUser, roomId);
+        host.authenticate();
+        guest.authenticate();
+        guest.next("WAITING");
+        JsonNode first = startGame(host, guest);
+        Client mover = hostUser.id().equals(first.path("turnUserId").asString()) ? host : guest;
+        mover.send(Map.of("type", "PLACE", "pieceUid", first.path("tray").get(0).path("uid").asString(),
+                "row", 0, "col", 0));
+        host.next("STATE");
+        guest.next("STATE");
+        guest.send(Map.of("type", "FORFEIT"));
+
+        // The result comes first, then the waiting room both players are back in, with nobody ready.
+        List<JsonNode> afterGame = host.until("WAITING");
+        assertThat(types(afterGame)).containsExactly("STATE", "WAITING");
+        assertThat(afterGame.getFirst().path("status").asString()).isEqualTo("FINISHED");
+        JsonNode waiting = afterGame.getLast();
+        assertThat(waiting.path("connectedUserIds").size()).isEqualTo(2);
+        assertThat(waiting.path("readyUserIds").size()).isZero();
+        assertThat(waiting.path("members").size()).isEqualTo(2);
+        assertThat(types(guest.until("WAITING"))).containsExactly("STATE", "WAITING");
+        assertThat(repository.findById(roomId).orElseThrow().status()).isEqualTo(MatchRoomStatus.FULL);
+        assertThat(rooms.membersOf(roomId, hostUser)).hasSize(2);
+
+        // The same room plays again, from scratch, once the guest readies and the host starts.
+        host.send(Map.of("type", "START"));
+        assertThat(host.next("ERROR").path("code").asString()).isEqualTo("OPPONENT_NOT_READY");
+        JsonNode next = startGame(host, guest);
+        assertThat(next.path("status").asString()).isEqualTo("PLAYING");
+        assertThat(next.path("lastMove").isNull()).isTrue();
+        for (JsonNode player : next.path("players")) {
+            assertThat(player.path("score").asInt()).isZero();
+            for (JsonNode row : player.path("board")) {
+                row.forEach(cell -> assertThat(cell.isNull()).isTrue());
+            }
+        }
+        assertThat(repository.findById(roomId).orElseThrow().status()).isEqualTo(MatchRoomStatus.PLAYING);
+
+        host.send(Map.of("type", "FORFEIT"));
+        assertThat(guest.next("STATE").path("winnerUserId").asString()).isEqualTo(guestUser.id());
+    }
+
+    @Test
+    void winnerGainsTrophiesEachGameAndTheLoserKeepsTheirs() throws Exception {
+        MatchRoomUser hostUser = storedUser();
+        MatchRoomUser guestUser = storedUser();
+        long roomId = fullRoom(hostUser, guestUser);
+        Client host = new Client(hostUser, roomId);
+        Client guest = new Client(guestUser, roomId);
+        host.authenticate();
+        guest.authenticate();
+        guest.next("WAITING");
+
+        JsonNode playing = startGame(host, guest);
+        assertThat(playing.path("trophyReward").isNull()).isTrue();
+        guest.send(Map.of("type", "FORFEIT"));
+        JsonNode finished = host.next("STATE");
+        guest.next("STATE");
+        JsonNode reward = finished.path("trophyReward");
+        assertThat(reward.path("userId").asString()).isEqualTo(hostUser.id());
+        assertThat(reward.path("gained").asInt()).isEqualTo(TrophyService.TROPHIES_PER_WIN);
+        assertThat(reward.path("trophy").asInt()).isEqualTo(TrophyService.TROPHIES_PER_WIN);
+        assertThat(trophiesOf(hostUser)).isEqualTo(TrophyService.TROPHIES_PER_WIN);
+        assertThat(trophiesOf(guestUser)).isZero();
+
+        // A rematch in the same room adds to the total; the game is reset but the trophies are not.
+        host.next("WAITING");
+        guest.next("WAITING");
+        JsonNode rematch = startGame(host, guest);
+        assertThat(rematch.path("trophyReward").isNull()).isTrue();
+        guest.send(Map.of("type", "FORFEIT"));
+        assertThat(host.next("STATE").path("trophyReward").path("trophy").asInt())
+                .isEqualTo(2 * TrophyService.TROPHIES_PER_WIN);
+        assertThat(trophiesOf(hostUser)).isEqualTo(2 * TrophyService.TROPHIES_PER_WIN);
+        assertThat(trophiesOf(guestUser)).isZero();
+    }
+
+    @Test
+    void eachPlayerCarriesTheThemeTheyEquippedWhenTheGameStarted() throws Exception {
+        MatchRoomUser hostUser = storedUser();
+        MatchRoomUser guestUser = storedUser();
+        jdbc.sql("INSERT INTO theme_order_history (user_id, theme_id, paid_coin) VALUES (:userId, 'theme_neon', 0)")
+                .param("userId", Long.parseLong(hostUser.id())).update();
+        themes.equip(Long.parseLong(hostUser.id()), "theme_neon");
+        long roomId = fullRoom(hostUser, guestUser);
+        Client host = new Client(hostUser, roomId);
+        Client guest = new Client(guestUser, roomId);
+        host.authenticate();
+        guest.authenticate();
+        guest.next("WAITING");
+
+        JsonNode state = startGame(host, guest);
+        assertThat(themeIdsByUser(state)).containsExactlyInAnyOrderEntriesOf(
+                Map.of(hostUser.id(), "theme_neon", guestUser.id(), ThemeEquipmentService.CLASSIC_THEME));
+
+        // Both screens get both themes, and a change made mid-game waits for the next game.
+        themes.equip(Long.parseLong(hostUser.id()), ThemeEquipmentService.CLASSIC_THEME);
+        host.session.close();
+        Client hostAgain = new Client(hostUser, roomId);
+        hostAgain.authenticate();
+        assertThat(themeIdsByUser(hostAgain.next("STATE"))).containsEntry(hostUser.id(), "theme_neon");
+        guest.send(Map.of("type", "FORFEIT"));
+        hostAgain.until("WAITING");
+        guest.until("WAITING");
+
+        JsonNode rematch = startGame(hostAgain, guest);
+        assertThat(themeIdsByUser(rematch)).containsEntry(hostUser.id(), ThemeEquipmentService.CLASSIC_THEME);
+    }
+
+    private static Map<String, String> themeIdsByUser(JsonNode state) {
+        Map<String, String> themeIds = new HashMap<>();
+        state.path("players").forEach(player ->
+                themeIds.put(player.path("userId").asString(), player.path("themeId").asString()));
+        return themeIds;
+    }
+
+    @Test
+    void afterTheGamePlayersMayComeBackOrLeave() throws Exception {
+        MatchRoomUser hostUser = newUser();
+        MatchRoomUser guestUser = newUser();
+        long roomId = fullRoom(hostUser, guestUser);
+        Client host = new Client(hostUser, roomId);
+        Client guest = new Client(guestUser, roomId);
+        host.authenticate();
+        guest.authenticate();
+        guest.next("WAITING");
+        startGame(host, guest);
+        host.send(Map.of("type", "FORFEIT"));
+        host.until("WAITING");
+        guest.until("WAITING");
+
+        // A player who comes back after the game finds the waiting room, not the old result.
+        host.session.close();
+        assertThat(guest.next("WAITING").path("connectedUserIds").size()).isEqualTo(1);
+        Client hostAgain = new Client(hostUser, roomId);
+        hostAgain.authenticate();
+        assertThat(types(hostAgain.until("WAITING"))).containsExactly("WAITING");
+        guest.next("WAITING");
+
+        // Leaving and deleting work as they do before a game.
+        rooms.leave(roomId, guestUser);
+        assertThat(guest.next("ROOM_CLOSED").path("reason").asString()).isEqualTo("LEFT_ROOM");
+        assertThat(hostAgain.next("WAITING").path("members").size()).isEqualTo(1);
+        assertThat(repository.findById(roomId).orElseThrow().status()).isEqualTo(MatchRoomStatus.WAITING);
+        rooms.delete(roomId, hostUser);
+        assertThat(hostAgain.next("ROOM_CLOSED").path("reason").asString()).isEqualTo("ROOM_DELETED");
         assertThat(repository.findById(roomId)).isEmpty();
     }
 
@@ -402,8 +578,7 @@ class GameSocketTests {
         guest.send(Map.of("type", "EMOTE", "emote", "wow"));
         assertThat(types(mover.until("EMOTE"))).doesNotContain("CURSOR", "ERROR");
 
-        // Once the game is over its channel is gone, so an emote would fail with ROOM_CLOSED. A cursor is
-        // still dropped quietly: the unknown emote's ERROR is the first one back.
+        // Once the game is over a cursor is dropped quietly too: the unknown emote's ERROR is the first one back.
         mover.send(Map.of("type", "FORFEIT"));
         waiter.next("STATE");
         mover.send(cursor(uid, 0, 0));

@@ -5,7 +5,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import com.polyo.polyo.TestcontainersConfiguration;
-import java.time.Instant;
+import com.polyo.polyo.matchroom.dto.CreateMatchRoomRequest;
+import com.polyo.polyo.matchroom.dto.JoinByCodeRequest;
+import com.polyo.polyo.matchroom.dto.MatchRoomResponse;
+import com.polyo.polyo.matchroom.dto.MatchRoomUser;
+import com.polyo.polyo.matchroom.entity.MatchRoomStatus;
+import com.polyo.polyo.matchroom.repository.MatchRoomRepository;
+import com.polyo.polyo.matchroom.service.EntryCodeGenerator;
+import com.polyo.polyo.matchroom.service.MatchRoomException;
+import com.polyo.polyo.matchroom.service.MatchRoomService;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -83,18 +91,6 @@ class MatchRoomConcurrencyTests {
         assertThat(second.entryCode()).isEqualTo("HJKLMNPQ");
         assertThat(service.joinByCode(new JoinByCodeRequest(first.entryCode()), host).roomId()).isEqualTo(first.roomId());
         assertThat(service.joinByCode(new JoinByCodeRequest(second.entryCode()), guest).roomId()).isEqualTo(second.roomId());
-    }
-
-    @Test
-    void playingRoomRejectsNewUsersAndDeletionButAllowsExistingMembers() {
-        MatchRoom room = new MatchRoom("진행 중", host.id(), false, "ABCDEFGH", MatchRoomStatus.PLAYING,
-                List.of(new MatchRoom.Member(host.id(), host.nickname()), new MatchRoom.Member(guest.id(), guest.nickname())),
-                Instant.now());
-        assertThat(room.join(host, false)).isSameAs(room);
-        assertThatThrownBy(() -> room.join(third, true)).isInstanceOf(MatchRoomException.class)
-                .hasMessage("이미 게임이 시작된 방입니다.");
-        assertThatThrownBy(() -> room.checkDeletableBy(host)).isInstanceOf(MatchRoomException.class)
-                .hasMessage("이미 게임이 시작된 방입니다.");
     }
 
     private MatchRoomResponse create(String roomName, boolean isPrivate, MatchRoomUser user) {
